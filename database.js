@@ -42,6 +42,20 @@ function initDatabase() {
     )
   `);
 
+  // 项目表
+  db.run(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      category_id INTEGER NOT NULL,
+      is_default BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    )
+  `);
+
   // 事项表
   db.run(`
     CREATE TABLE IF NOT EXISTS tasks (
@@ -49,13 +63,15 @@ function initDatabase() {
       title TEXT NOT NULL,
       description TEXT,
       category_id INTEGER,
+      project_id INTEGER NOT NULL,
       priority TEXT CHECK(priority IN ('p0', 'p1', 'p2')) DEFAULT 'p2',
       status TEXT CHECK(status IN ('todo', 'doing', 'done', 'backlog')) DEFAULT 'todo',
       progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
       week_number INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `);
 
@@ -74,7 +90,9 @@ function initDatabase() {
   `);
 
   // 创建索引
+  db.run(`CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_week ON tasks(week_number)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_weekly_logs_week ON weekly_logs(week_number)`);
@@ -99,13 +117,24 @@ function initDefaultData() {
     try {
       db.run(`INSERT OR IGNORE INTO categories (name, description) VALUES (?, ?)`, 
         [cat.name, cat.description]);
+      
+      // 为每个分类创建默认项目"杂"
+      const categoryResult = db.exec(`SELECT id FROM categories WHERE name = ?`, [cat.name]);
+      if (categoryResult.length > 0 && categoryResult[0].values.length > 0) {
+        const categoryId = categoryResult[0].values[0][0];
+        db.run(`INSERT OR IGNORE INTO projects (name, description, category_id, is_default) 
+                SELECT '杂', '默认项目，用于未明确归类的任务', ?, 1
+                WHERE NOT EXISTS (SELECT 1 FROM projects WHERE category_id = ? AND is_default = 1)`, 
+          [categoryId, categoryId]);
+      }
     } catch (e) {
       // 忽略重复插入错误
+      console.error('Error inserting default data:', e);
     }
   }
   
   saveDatabase();
-  console.log('Default categories inserted');
+  console.log('Default categories and projects inserted');
 }
 
 // 辅助函数：执行查询

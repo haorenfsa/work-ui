@@ -5,9 +5,13 @@ const API_BASE = 'http://localhost:3000/api';
 const app = {
     currentView: 'categories',
     currentCategory: null,
+    currentProject: null,
     currentWeek: null,
+    currentTab: 'projects',
     categories: [],
+    projects: [],
     tasks: [],
+    allProjects: [],
 
     // 初始化应用
     init() {
@@ -60,6 +64,36 @@ const app = {
         }
     },
 
+    // ============ Tab 切换 ============
+    
+    switchTab(tabName) {
+        this.currentTab = tabName;
+        
+        // 更新tab按钮状态
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === tabName) {
+                btn.classList.add('active');
+            }
+        });
+        
+        // 更新tab内容
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+            pane.classList.remove('active');
+        });
+        
+        if (tabName === 'projects') {
+            document.getElementById('projectsTab').classList.add('active');
+            document.getElementById('addProjectBtn').style.display = 'inline-block';
+            document.getElementById('addTaskBtn').style.display = 'none';
+        } else {
+            document.getElementById('tasksTab').classList.add('active');
+            document.getElementById('addProjectBtn').style.display = 'none';
+            document.getElementById('addTaskBtn').style.display = 'inline-block';
+            this.loadCategoryTasks();
+        }
+    },
+
     // ============ 分类管理 ============
 
     async loadCategories() {
@@ -85,12 +119,12 @@ const app = {
                 <div class="category-card-description">${cat.description || '暂无描述'}</div>
                 <div class="category-card-stats">
                     <div class="category-card-stat">
-                        <div class="category-card-stat-value">${cat.task_count || 0}</div>
-                        <div class="category-card-stat-label">总任务</div>
+                        <div class="category-card-stat-value">${cat.project_count || 0}</div>
+                        <div class="category-card-stat-label">项目数</div>
                     </div>
                     <div class="category-card-stat">
-                        <div class="category-card-stat-value">${cat.done_count || 0}</div>
-                        <div class="category-card-stat-label">已完成</div>
+                        <div class="category-card-stat-value">${cat.task_count || 0}</div>
+                        <div class="category-card-stat-label">总任务</div>
                     </div>
                     <div class="category-card-stat">
                         <div class="category-card-stat-value">${cat.task_count > 0 ? Math.round((cat.done_count || 0) / cat.task_count * 100) : 0}%</div>
@@ -107,7 +141,7 @@ const app = {
             <div class="sidebar-item ${this.currentCategory === cat.id ? 'active' : ''}" 
                  onclick="app.showCategoryDetail(${cat.id})">
                 <div class="sidebar-item-name">${cat.name}</div>
-                <div class="sidebar-item-count">${cat.task_count || 0} 个任务</div>
+                <div class="sidebar-item-count">${cat.project_count || 0} 个项目 · ${cat.task_count || 0} 个任务</div>
             </div>
         `).join('');
     },
@@ -177,7 +211,7 @@ const app = {
 
     async deleteCategory() {
         const id = document.getElementById('categoryId').value;
-        if (!confirm('确定要删除这个分类吗？分类下的任务不会被删除。')) {
+        if (!confirm('确定要删除这个分类吗？分类下的所有项目和任务都将被删除。')) {
             return;
         }
 
@@ -198,51 +232,333 @@ const app = {
         }
     },
 
-    // ============ 事项管理 ============
+    // ============ 分类详情 ============
 
     async showCategoryDetail(categoryId) {
         this.currentCategory = categoryId;
+        this.currentTab = 'projects';
         const category = this.categories.find(c => c.id === categoryId);
         
         document.getElementById('categoryDetailTitle').textContent = category.name;
-        document.getElementById('categoryDetailView').classList.add('active');
         document.getElementById('categoriesView').classList.remove('active');
+        document.getElementById('categoryDetailView').classList.add('active');
+        
+        // 重置tab状态
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === 'projects') {
+                btn.classList.add('active');
+            }
+        });
+        
+        document.getElementById('projectsTab').classList.add('active');
+        document.getElementById('tasksTab').classList.remove('active');
+        document.getElementById('addProjectBtn').style.display = 'inline-block';
+        document.getElementById('addTaskBtn').style.display = 'none';
 
-        await this.loadTasks(categoryId);
+        await this.loadProjects(categoryId);
         this.renderSidebar();
     },
 
-    async loadTasks(categoryId = null) {
+    // ============ 项目管理 ============
+
+    async loadProjects(categoryId) {
         try {
-            let url = `${API_BASE}/tasks`;
-            if (categoryId) {
-                url += `?category_id=${categoryId}`;
-            }
-            
-            const response = await fetch(url);
-            this.tasks = await response.json();
-            this.renderTasks();
+            const response = await fetch(`${API_BASE}/categories/${categoryId}/projects`);
+            this.projects = await response.json();
+            this.renderProjects();
         } catch (error) {
-            console.error('加载事项失败:', error);
-            alert('加载事项失败');
+            console.error('加载项目失败:', error);
+            alert('加载项目失败');
         }
     },
 
-    renderTasks() {
-        const list = document.getElementById('tasksList');
+    renderProjects() {
+        const grid = document.getElementById('projectsGrid');
+        
+        if (this.projects.length === 0) {
+            grid.innerHTML = '<div style="text-align:center; padding:2rem; color:#6c757d;">暂无项目</div>';
+            return;
+        }
+
+        grid.innerHTML = this.projects.map(project => `
+            <div class="project-card ${project.is_default ? 'default-project' : ''}" 
+                 onclick="app.showProjectDetail(${project.id})">
+                <div class="project-card-header">
+                    <div class="project-card-title">
+                        ${project.name}
+                        ${project.is_default ? '<span class="default-badge">默认</span>' : ''}
+                    </div>
+                    <button class="project-card-edit" onclick="event.stopPropagation(); app.editProject(${project.id})">⚙️</button>
+                </div>
+                <div class="project-card-description">${project.description || '暂无描述'}</div>
+                <div class="project-card-stats">
+                    <div class="project-card-stat">
+                        <div class="project-card-stat-value">${project.task_count || 0}</div>
+                        <div class="project-card-stat-label">总任务</div>
+                    </div>
+                    <div class="project-card-stat">
+                        <div class="project-card-stat-value">${project.done_count || 0}</div>
+                        <div class="project-card-stat-label">已完成</div>
+                    </div>
+                    <div class="project-card-stat">
+                        <div class="project-card-stat-value">${project.task_count > 0 ? Math.round((project.done_count || 0) / project.task_count * 100) : 0}%</div>
+                        <div class="project-card-stat-label">完成率</div>
+                    </div>
+                </div>
+                <div class="project-card-footer">
+                    创建于 ${new Date(project.created_at).toLocaleDateString()}
+                </div>
+            </div>
+        `).join('');
+    },
+
+    showProjectModal(projectId = null) {
+        const modal = document.getElementById('projectModal');
+        const title = document.getElementById('projectModalTitle');
+        const deleteBtn = document.getElementById('deleteProjectBtn');
+
+        if (projectId) {
+            const project = this.projects.find(p => p.id === projectId);
+            title.textContent = '编辑项目';
+            document.getElementById('projectId').value = project.id;
+            document.getElementById('projectName').value = project.name;
+            document.getElementById('projectDescription').value = project.description || '';
+            document.getElementById('projectCategoryId').value = project.category_id;
+            document.getElementById('projectIsDefault').value = project.is_default;
+            
+            if (project.is_default) {
+                deleteBtn.style.display = 'none';
+            } else {
+                deleteBtn.style.display = 'inline-block';
+            }
+        } else {
+            title.textContent = '新建项目';
+            document.getElementById('projectId').value = '';
+            document.getElementById('projectName').value = '';
+            document.getElementById('projectDescription').value = '';
+            document.getElementById('projectCategoryId').value = this.currentCategory;
+            document.getElementById('projectIsDefault').value = '0';
+            deleteBtn.style.display = 'none';
+        }
+
+        modal.classList.add('active');
+    },
+
+    closeProjectModal() {
+        document.getElementById('projectModal').classList.remove('active');
+    },
+
+    editProject(id) {
+        this.showProjectModal(id);
+    },
+
+    async saveProject() {
+        const id = document.getElementById('projectId').value;
+        const name = document.getElementById('projectName').value.trim();
+        const description = document.getElementById('projectDescription').value.trim();
+        const category_id = document.getElementById('projectCategoryId').value;
+
+        if (!name) {
+            alert('请输入项目名称');
+            return;
+        }
+
+        try {
+            const url = id ? `${API_BASE}/projects/${id}` : `${API_BASE}/projects`;
+            const method = id ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description, category_id })
+            });
+
+            if (response.ok) {
+                this.closeProjectModal();
+                await this.loadProjects(this.currentCategory);
+                this.loadCategories(); // 更新统计
+            } else {
+                const error = await response.json();
+                alert('保存失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('保存项目失败:', error);
+            alert('保存失败');
+        }
+    },
+
+    async deleteProject() {
+        const id = document.getElementById('projectId').value;
+        if (!confirm('确定要删除这个项目吗？项目下的任务将移至默认项目"杂"。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/projects/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.closeProjectModal();
+                await this.loadProjects(this.currentCategory);
+                this.loadCategories();
+            } else {
+                const error = await response.json();
+                alert('删除失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('删除项目失败:', error);
+            alert('删除失败');
+        }
+    },
+
+    // ============ 项目详情 ============
+
+    async showProjectDetail(projectId) {
+        this.currentProject = projectId;
+        const project = this.projects.find(p => p.id === projectId);
+        const category = this.categories.find(c => c.id === this.currentCategory);
+        
+        document.getElementById('projectDetailTitle').textContent = project.name;
+        document.getElementById('projectDetailMeta').textContent = 
+            `${category.name} / ${project.description || '暂无描述'}`;
+        
+        document.getElementById('categoryDetailView').classList.remove('active');
+        document.getElementById('projectDetailView').classList.add('active');
+
+        await this.loadProjectTasks(projectId);
+    },
+
+    backToCategoryDetail() {
+        this.currentProject = null;
+        document.getElementById('projectDetailView').classList.remove('active');
+        document.getElementById('categoryDetailView').classList.add('active');
+    },
+
+    async loadProjectTasks(projectId) {
+        try {
+            const response = await fetch(`${API_BASE}/projects/${projectId}/tasks`);
+            this.tasks = await response.json();
+            this.renderProjectTasks();
+        } catch (error) {
+            console.error('加载项目事项失败:', error);
+            alert('加载项目事项失败');
+        }
+    },
+
+    renderProjectTasks() {
+        const list = document.getElementById('projectTasksList');
         
         if (this.tasks.length === 0) {
             list.innerHTML = '<div style="text-align:center; padding:2rem; color:#6c757d;">暂无事项</div>';
             return;
         }
 
-        list.innerHTML = this.tasks.map(task => `
+        list.innerHTML = this.tasks.map(task => this.renderTaskItem(task)).join('');
+    },
+
+    // ============ 分类事项总览 ============
+
+    async loadCategoryTasks() {
+        try {
+            // 加载所有项目用于筛选
+            const projectsResponse = await fetch(`${API_BASE}/categories/${this.currentCategory}/projects`);
+            this.allProjects = await projectsResponse.json();
+            
+            // 填充项目筛选下拉框
+            const projectFilter = document.getElementById('projectFilter');
+            projectFilter.innerHTML = '<option value="">全部项目</option>' +
+                this.allProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            
+            // 加载事项
+            this.filterTasksByProject();
+        } catch (error) {
+            console.error('加载分类事项失败:', error);
+            alert('加载分类事项失败');
+        }
+    },
+
+    async filterTasksByProject() {
+        try {
+            const projectId = document.getElementById('projectFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const priority = document.getElementById('priorityFilter').value;
+            
+            let url = `${API_BASE}/categories/${this.currentCategory}/tasks`;
+            const params = [];
+            
+            if (projectId) params.push(`project_id=${projectId}`);
+            if (status) params.push(`status=${status}`);
+            if (priority) params.push(`priority=${priority}`);
+            
+            if (params.length > 0) {
+                url += '?' + params.join('&');
+            }
+            
+            const response = await fetch(url);
+            let tasks = await response.json();
+            
+            // 客户端过滤（因为API可能不支持所有过滤参数）
+            if (projectId) {
+                tasks = tasks.filter(t => t.project_id == projectId);
+            }
+            if (status) {
+                tasks = tasks.filter(t => t.status === status);
+            }
+            if (priority) {
+                tasks = tasks.filter(t => t.priority === priority);
+            }
+            
+            this.renderCategoryTasks(tasks);
+        } catch (error) {
+            console.error('筛选事项失败:', error);
+            alert('筛选事项失败');
+        }
+    },
+
+    renderCategoryTasks(tasks) {
+        const list = document.getElementById('categoryTasksList');
+        
+        if (tasks.length === 0) {
+            list.innerHTML = '<div style="text-align:center; padding:2rem; color:#6c757d;">暂无事项</div>';
+            return;
+        }
+
+        // 按项目分组
+        const tasksByProject = {};
+        tasks.forEach(task => {
+            const projectName = task.project_name || '未分类';
+            if (!tasksByProject[projectName]) {
+                tasksByProject[projectName] = [];
+            }
+            tasksByProject[projectName].push(task);
+        });
+
+        let html = '';
+        for (const [projectName, projectTasks] of Object.entries(tasksByProject)) {
+            html += `
+                <div class="task-group">
+                    <div class="task-group-header">${projectName} (${projectTasks.length})</div>
+                    ${projectTasks.map(task => this.renderTaskItem(task)).join('')}
+                </div>
+            `;
+        }
+        
+        list.innerHTML = html;
+    },
+
+    // ============ 事项管理 ============
+
+    renderTaskItem(task) {
+        return `
             <div class="task-item priority-${task.priority}" onclick="app.editTask(${task.id})">
                 <div class="task-item-header">
                     <div class="task-item-title">${task.title}</div>
                     <div class="task-item-meta">
                         <span class="task-badge priority-${task.priority}">${task.priority.toUpperCase()}</span>
                         <span class="task-badge status-${task.status}">${this.getStatusText(task.status)}</span>
+                        ${task.project_name ? `<span class="task-badge" style="background:#e9ecef;color:#495057;">${task.project_name}</span>` : ''}
                     </div>
                 </div>
                 ${task.description ? `<div class="task-item-description">${task.description}</div>` : ''}
@@ -255,7 +571,7 @@ const app = {
                     <div class="task-week">${task.progress}% ${task.week_number ? `| WK${task.week_number}` : ''}</div>
                 </div>
             </div>
-        `).join('');
+        `;
     },
 
     getStatusText(status) {
@@ -268,18 +584,25 @@ const app = {
         return statusMap[status] || status;
     },
 
-    showTaskModal(taskId = null) {
+    async showTaskModal(taskId = null) {
         const modal = document.getElementById('taskModal');
         const title = document.getElementById('taskModalTitle');
         const deleteBtn = document.getElementById('deleteTaskBtn');
 
+        // 加载所有分类和项目
+        if (this.categories.length === 0) {
+            await this.loadCategories();
+        }
+
         // 填充分类选项
         const categorySelect = document.getElementById('taskCategory');
-        categorySelect.innerHTML = '<option value="">无分类</option>' + 
+        categorySelect.innerHTML = '<option value="">请选择分类</option>' + 
             this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
 
         if (taskId) {
-            const task = this.tasks.find(t => t.id === taskId);
+            const response = await fetch(`${API_BASE}/tasks/${taskId}`);
+            const task = await response.json();
+            
             title.textContent = '编辑事项';
             document.getElementById('taskId').value = task.id;
             document.getElementById('taskTitle').value = task.title;
@@ -289,6 +612,11 @@ const app = {
             document.getElementById('taskStatus').value = task.status;
             document.getElementById('taskProgress').value = task.progress;
             document.getElementById('taskWeek').value = task.week_number || '';
+            
+            // 加载该分类的项目
+            await this.updateProjectOptions();
+            document.getElementById('taskProject').value = task.project_id;
+            
             deleteBtn.style.display = 'inline-block';
         } else {
             title.textContent = '新建事项';
@@ -300,10 +628,51 @@ const app = {
             document.getElementById('taskStatus').value = 'todo';
             document.getElementById('taskProgress').value = '0';
             document.getElementById('taskWeek').value = this.currentWeek || '';
+            
+            await this.updateProjectOptions();
+            
             deleteBtn.style.display = 'none';
         }
 
         modal.classList.add('active');
+    },
+
+    async updateProjectOptions() {
+        const categoryId = document.getElementById('taskCategory').value;
+        const projectSelect = document.getElementById('taskProject');
+        
+        if (!categoryId) {
+            projectSelect.innerHTML = '<option value="">请先选择分类</option>';
+            projectSelect.disabled = true;
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/categories/${categoryId}/projects`);
+            const projects = await response.json();
+            
+            projectSelect.innerHTML = projects.map(p => 
+                `<option value="${p.id}">${p.name}${p.is_default ? ' (默认)' : ''}</option>`
+            ).join('');
+            projectSelect.disabled = false;
+            
+            // 如果当前项目属于该分类，自动选择
+            if (this.currentProject) {
+                const project = projects.find(p => p.id === this.currentProject);
+                if (project) {
+                    projectSelect.value = this.currentProject;
+                }
+            } else {
+                // 默认选择默认项目
+                const defaultProject = projects.find(p => p.is_default);
+                if (defaultProject) {
+                    projectSelect.value = defaultProject.id;
+                }
+            }
+        } catch (error) {
+            console.error('加载项目选项失败:', error);
+            projectSelect.innerHTML = '<option value="">加载失败</option>';
+        }
     },
 
     closeTaskModal() {
@@ -319,6 +688,7 @@ const app = {
         const title = document.getElementById('taskTitle').value.trim();
         const description = document.getElementById('taskDescription').value.trim();
         const category_id = document.getElementById('taskCategory').value || null;
+        const project_id = document.getElementById('taskProject').value;
         const priority = document.getElementById('taskPriority').value;
         const status = document.getElementById('taskStatus').value;
         const progress = parseInt(document.getElementById('taskProgress').value) || 0;
@@ -326,6 +696,11 @@ const app = {
 
         if (!title) {
             alert('请输入事项标题');
+            return;
+        }
+
+        if (!project_id) {
+            alert('请选择所属项目');
             return;
         }
 
@@ -337,20 +712,26 @@ const app = {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    title, description, category_id, priority, status, progress, week_number
+                    title, description, category_id, project_id, priority, status, progress, week_number
                 })
             });
 
             if (response.ok) {
                 this.closeTaskModal();
-                if (this.currentView === 'categories' && this.currentCategory) {
-                    await this.loadTasks(this.currentCategory);
+                
+                // 刷新相应视图
+                if (this.currentProject) {
+                    await this.loadProjectTasks(this.currentProject);
+                } else if (this.currentTab === 'tasks') {
+                    await this.loadCategoryTasks();
                 } else if (this.currentView === 'weekly') {
                     await this.loadWeeklyView();
                 }
+                
                 this.loadCategories(); // 更新统计
             } else {
-                alert('保存失败');
+                const error = await response.json();
+                alert('保存失败: ' + (error.error || '未知错误'));
             }
         } catch (error) {
             console.error('保存事项失败:', error);
@@ -371,9 +752,14 @@ const app = {
 
             if (response.ok) {
                 this.closeTaskModal();
-                if (this.currentCategory) {
-                    await this.loadTasks(this.currentCategory);
+                
+                // 刷新相应视图
+                if (this.currentProject) {
+                    await this.loadProjectTasks(this.currentProject);
+                } else if (this.currentTab === 'tasks') {
+                    await this.loadCategoryTasks();
                 }
+                
                 this.loadCategories();
             } else {
                 alert('删除失败');
@@ -463,26 +849,7 @@ const app = {
             <div class="priority-group">
                 <div class="priority-group-header ${priority}">${title}</div>
                 <div class="priority-group-tasks">
-                    ${tasks.map(task => `
-                        <div class="task-item priority-${task.priority}" onclick="app.editTask(${task.id})">
-                            <div class="task-item-header">
-                                <div class="task-item-title">${task.title}</div>
-                                <div class="task-item-meta">
-                                    <span class="task-badge status-${task.status}">${this.getStatusText(task.status)}</span>
-                                    ${task.category_name ? `<span class="task-badge" style="background:#e9ecef;color:#495057;">${task.category_name}</span>` : ''}
-                                </div>
-                            </div>
-                            ${task.description ? `<div class="task-item-description">${task.description}</div>` : ''}
-                            <div class="task-item-footer">
-                                <div class="task-progress">
-                                    <div class="task-progress-bar">
-                                        <div class="task-progress-fill" style="width: ${task.progress}%"></div>
-                                    </div>
-                                </div>
-                                <div class="task-week">${task.progress}%</div>
-                            </div>
-                        </div>
-                    `).join('')}
+                    ${tasks.map(task => this.renderTaskItem(task)).join('')}
                 </div>
             </div>
         `;
@@ -527,29 +894,50 @@ const app = {
     renderReport(data) {
         let markdown = `# WK${data.weekNumber} 周报\n\n`;
         
-        // 本周进展
+        // 本周进展（按分类和项目）
         markdown += `## 本周进展\n\n`;
         
         const doneByCategory = {};
         data.doneTasksByCategory.forEach(task => {
-            if (!doneByCategory[task.category_name]) {
-                doneByCategory[task.category_name] = [];
+            const categoryName = task.category_name || '其他';
+            if (!doneByCategory[categoryName]) {
+                doneByCategory[categoryName] = {};
             }
-            doneByCategory[task.category_name].push(task);
+            const projectName = task.project_name || '未分类';
+            if (!doneByCategory[categoryName][projectName]) {
+                doneByCategory[categoryName][projectName] = [];
+            }
+            doneByCategory[categoryName][projectName].push(task);
         });
         
-        for (const [category, tasks] of Object.entries(doneByCategory)) {
-            markdown += `${category}:\n`;
-            tasks.forEach(task => {
-                markdown += `- ${task.title}`;
-                if (task.progress < 100) {
-                    markdown += ` [${task.progress}%]`;
+        for (const [category, projects] of Object.entries(doneByCategory)) {
+            markdown += `**${category}**:\n`;
+            for (const [project, tasks] of Object.entries(projects)) {
+                if (Object.keys(projects).length > 1 || project !== '杂') {
+                    markdown += `  *${project}*:\n`;
+                    tasks.forEach(task => {
+                        markdown += `    - ${task.title}`;
+                        if (task.progress < 100) {
+                            markdown += ` [${task.progress}%]`;
+                        }
+                        markdown += '\n';
+                        if (task.description) {
+                            markdown += `        - ${task.description}\n`;
+                        }
+                    });
+                } else {
+                    tasks.forEach(task => {
+                        markdown += `  - ${task.title}`;
+                        if (task.progress < 100) {
+                            markdown += ` [${task.progress}%]`;
+                        }
+                        markdown += '\n';
+                        if (task.description) {
+                            markdown += `      - ${task.description}\n`;
+                        }
+                    });
                 }
-                markdown += '\n';
-                if (task.description) {
-                    markdown += `    - ${task.description}\n`;
-                }
-            });
+            }
             markdown += '\n';
         }
         
@@ -557,7 +945,10 @@ const app = {
         if (data.addedTasks.length > 0) {
             markdown += `## 本周新增需求 (Added)\n`;
             data.addedTasks.forEach(task => {
-                markdown += `- ${task.category_name ? task.category_name + ': ' : ''}${task.title}\n`;
+                const prefix = task.project_name && task.project_name !== '杂' 
+                    ? `${task.category_name || ''}/${task.project_name}` 
+                    : task.category_name || '';
+                markdown += `- ${prefix ? prefix + ': ' : ''}${task.title}\n`;
             });
             markdown += '\n';
         }
@@ -566,7 +957,11 @@ const app = {
         if (data.inProgressTasks.length > 0) {
             markdown += `## 进行中 (In Progress)\n`;
             data.inProgressTasks.forEach(task => {
-                markdown += `- ${task.title} [${task.progress}%]\n`;
+                markdown += `- ${task.title} [${task.progress}%]`;
+                if (task.project_name && task.project_name !== '杂') {
+                    markdown += ` (${task.project_name})`;
+                }
+                markdown += '\n';
             });
             markdown += '\n';
         }
@@ -578,16 +973,29 @@ const app = {
             data.backlogTasks.forEach(task => {
                 const cat = task.category_name || '其他';
                 if (!backlogByCategory[cat]) {
-                    backlogByCategory[cat] = [];
+                    backlogByCategory[cat] = {};
                 }
-                backlogByCategory[cat].push(task);
+                const proj = task.project_name || '未分类';
+                if (!backlogByCategory[cat][proj]) {
+                    backlogByCategory[cat][proj] = [];
+                }
+                backlogByCategory[cat][proj].push(task);
             });
             
-            for (const [category, tasks] of Object.entries(backlogByCategory)) {
-                markdown += `${category}:\n`;
-                tasks.forEach(task => {
-                    markdown += `- ${task.title}\n`;
-                });
+            for (const [category, projects] of Object.entries(backlogByCategory)) {
+                markdown += `**${category}**:\n`;
+                for (const [project, tasks] of Object.entries(projects)) {
+                    if (Object.keys(projects).length > 1 || project !== '杂') {
+                        markdown += `  *${project}*:\n`;
+                        tasks.forEach(task => {
+                            markdown += `    - ${task.title}\n`;
+                        });
+                    } else {
+                        tasks.forEach(task => {
+                            markdown += `  - ${task.title}\n`;
+                        });
+                    }
+                }
                 markdown += '\n';
             }
         }

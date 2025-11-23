@@ -45,10 +45,66 @@
                 <div class="view-header">
                     <button class="btn btn-secondary" onclick="app.showView('categories')">← 返回</button>
                     <h2 id="categoryDetailTitle"></h2>
+                    <div>
+                        <button class="btn btn-primary" id="addProjectBtn" onclick="app.showProjectModal()">+ 新建项目</button>
+                        <button class="btn btn-primary" id="addTaskBtn" onclick="app.showTaskModal()">+ 新建事项</button>
+                    </div>
+                </div>
+                
+                <!-- Tab 切换 -->
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="projects" onclick="app.switchTab('projects')">分类项目</button>
+                    <button class="tab-btn" data-tab="tasks" onclick="app.switchTab('tasks')">分类事项总览</button>
+                </div>
+                
+                <!-- Tab 内容 -->
+                <div class="tab-content">
+                    <!-- 项目视图 -->
+                    <div id="projectsTab" class="tab-pane active">
+                        <div class="projects-grid" id="projectsGrid">
+                            <!-- 动态加载项目列表 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 事项总览视图 -->
+                    <div id="tasksTab" class="tab-pane">
+                        <div class="filter-bar">
+                            <select id="projectFilter" onchange="app.filterTasksByProject()">
+                                <option value="">全部项目</option>
+                            </select>
+                            <select id="statusFilter" onchange="app.filterTasksByProject()">
+                                <option value="">全部状态</option>
+                                <option value="todo">待办</option>
+                                <option value="doing">进行中</option>
+                                <option value="done">已完成</option>
+                                <option value="backlog">Backlog</option>
+                            </select>
+                            <select id="priorityFilter" onchange="app.filterTasksByProject()">
+                                <option value="">全部优先级</option>
+                                <option value="p0">P0</option>
+                                <option value="p1">P1</option>
+                                <option value="p2">P2</option>
+                            </select>
+                        </div>
+                        <div class="tasks-list" id="categoryTasksList">
+                            <!-- 动态加载事项列表 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目详情视图 -->
+            <div id="projectDetailView" class="view">
+                <div class="view-header">
+                    <button class="btn btn-secondary" onclick="app.backToCategoryDetail()">← 返回</button>
+                    <div class="project-detail-info">
+                        <h2 id="projectDetailTitle"></h2>
+                        <p id="projectDetailMeta"></p>
+                    </div>
                     <button class="btn btn-primary" onclick="app.showTaskModal()">+ 新建事项</button>
                 </div>
-                <div class="tasks-list" id="tasksList">
-                    <!-- 动态加载事项列表 -->
+                <div class="tasks-list" id="projectTasksList">
+                    <!-- 动态加载项目事项列表 -->
                 </div>
             </div>
 
@@ -114,6 +170,34 @@
         </div>
     </div>
 
+    <!-- 项目模态框 -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="projectModalTitle">新建项目</h3>
+                <span class="close" onclick="app.closeProjectModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="projectId">
+                <input type="hidden" id="projectCategoryId">
+                <input type="hidden" id="projectIsDefault">
+                <div class="form-group">
+                    <label>项目名称 *</label>
+                    <input type="text" id="projectName" placeholder="请输入项目名称" required>
+                </div>
+                <div class="form-group">
+                    <label>项目描述</label>
+                    <textarea id="projectDescription" placeholder="请输入项目描述" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="app.closeProjectModal()">取消</button>
+                <button class="btn btn-danger" id="deleteProjectBtn" onclick="app.deleteProject()" style="display:none;">删除</button>
+                <button class="btn btn-primary" onclick="app.saveProject()">保存</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 事项模态框 -->
     <div id="taskModal" class="modal">
         <div class="modal-content modal-large">
@@ -130,10 +214,16 @@
                     </div>
                     <div class="form-group">
                         <label>所属分类</label>
-                        <select id="taskCategory">
+                        <select id="taskCategory" onchange="app.updateProjectOptions()">
                             <!-- 动态加载分类选项 -->
                         </select>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>所属项目 *</label>
+                    <select id="taskProject" required>
+                        <!-- 动态加载项目选项 -->
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>详细描述</label>
