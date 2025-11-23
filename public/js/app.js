@@ -595,6 +595,20 @@ const app = {
         return Math.ceil(diff / oneWeek);
     },
 
+    // 获取默认周次：周五、周六、周日时返回下一周
+    getDefaultWeekNumber() {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0=周日, 1=周一, ..., 6=周六
+        const currentWeek = this.getCurrentWeekNumber();
+        
+        // 如果是周五(5)、周六(6)、周日(0)，返回下一周
+        if (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6) {
+            return currentWeek + 1;
+        }
+        
+        return currentWeek;
+    },
+
     async loadWeeklyView() {
         document.getElementById('weekTitle').textContent = `WK${this.currentWeek}`;
         
@@ -896,7 +910,7 @@ const app = {
             document.getElementById('quickTaskDescription').value = '';
             document.getElementById('quickTaskStatus').value = 'todo';
             document.getElementById('quickTaskProgress').value = '0';
-            document.getElementById('quickTaskWeek').value = this.currentWeek || '';
+            document.getElementById('quickTaskWeek').value = this.getDefaultWeekNumber() || '';
             
             // 重置优先级按钮
             document.querySelectorAll('.priority-btn').forEach(btn => {
