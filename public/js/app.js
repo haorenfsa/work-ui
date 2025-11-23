@@ -551,7 +551,7 @@ const app = {
 
     renderTaskItem(task) {
         return `
-            <div class="task-item priority-${task.priority}" onclick="app.editTask(${task.id})">
+            <div class="task-item priority-${task.priority}" onclick="app.showQuickAddModal(${task.id})">
                 <div class="task-item-header">
                     <div class="task-item-title">${task.title}</div>
                     <div class="task-item-meta">
@@ -583,191 +583,7 @@ const app = {
         return statusMap[status] || status;
     },
 
-    async showTaskModal(taskId = null) {
-        const modal = document.getElementById('taskModal');
-        const title = document.getElementById('taskModalTitle');
-        const deleteBtn = document.getElementById('deleteTaskBtn');
-
-        // 加载所有分类和项目
-        if (this.categories.length === 0) {
-            await this.loadCategories();
-        }
-
-        // 填充分类选项
-        const categorySelect = document.getElementById('taskCategory');
-        categorySelect.innerHTML = '<option value="">请选择分类</option>' + 
-            this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
-
-        if (taskId) {
-            const response = await fetch(`${API_BASE}/tasks/${taskId}`);
-            const task = await response.json();
-            
-            title.textContent = '编辑事项';
-            document.getElementById('taskId').value = task.id;
-            document.getElementById('taskTitle').value = task.title;
-            document.getElementById('taskDescription').value = task.description || '';
-            document.getElementById('taskCategory').value = task.category_id || '';
-            document.getElementById('taskPriority').value = task.priority;
-            document.getElementById('taskStatus').value = task.status;
-            document.getElementById('taskProgress').value = task.progress;
-            document.getElementById('taskWeek').value = task.week_number || '';
-            
-            // 加载该分类的项目
-            await this.updateProjectOptions();
-            document.getElementById('taskProject').value = task.project_id;
-            
-            deleteBtn.style.display = 'inline-block';
-        } else {
-            title.textContent = '新建事项';
-            document.getElementById('taskId').value = '';
-            document.getElementById('taskTitle').value = '';
-            document.getElementById('taskDescription').value = '';
-            document.getElementById('taskCategory').value = this.currentCategory || '';
-            document.getElementById('taskPriority').value = 'p2';
-            document.getElementById('taskStatus').value = 'todo';
-            document.getElementById('taskProgress').value = '0';
-            document.getElementById('taskWeek').value = this.currentWeek || '';
-            
-            await this.updateProjectOptions();
-            
-            deleteBtn.style.display = 'none';
-        }
-
-        modal.classList.add('active');
-    },
-
-    async updateProjectOptions() {
-        const categoryId = document.getElementById('taskCategory').value;
-        const projectSelect = document.getElementById('taskProject');
-        
-        if (!categoryId) {
-            projectSelect.innerHTML = '<option value="">请先选择分类</option>';
-            projectSelect.disabled = true;
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${API_BASE}/categories/${categoryId}/projects`);
-            const projects = await response.json();
-            
-            projectSelect.innerHTML = projects.map(p => 
-                `<option value="${p.id}">${p.name}${p.is_default ? ' (默认)' : ''}</option>`
-            ).join('');
-            projectSelect.disabled = false;
-            
-            // 如果当前项目属于该分类，自动选择
-            if (this.currentProject) {
-                const project = projects.find(p => p.id === this.currentProject);
-                if (project) {
-                    projectSelect.value = this.currentProject;
-                }
-            } else {
-                // 默认选择默认项目
-                const defaultProject = projects.find(p => p.is_default);
-                if (defaultProject) {
-                    projectSelect.value = defaultProject.id;
-                }
-            }
-        } catch (error) {
-            console.error('加载项目选项失败:', error);
-            projectSelect.innerHTML = '<option value="">加载失败</option>';
-        }
-    },
-
-    closeTaskModal() {
-        document.getElementById('taskModal').classList.remove('active');
-    },
-
-    editTask(id) {
-        this.showTaskModal(id);
-    },
-
-    async saveTask() {
-        const id = document.getElementById('taskId').value;
-        const title = document.getElementById('taskTitle').value.trim();
-        const description = document.getElementById('taskDescription').value.trim();
-        const category_id = document.getElementById('taskCategory').value || null;
-        const project_id = document.getElementById('taskProject').value;
-        const priority = document.getElementById('taskPriority').value;
-        const status = document.getElementById('taskStatus').value;
-        const progress = parseInt(document.getElementById('taskProgress').value) || 0;
-        const week_number = parseInt(document.getElementById('taskWeek').value) || null;
-
-        if (!title) {
-            alert('请输入事项标题');
-            return;
-        }
-
-        if (!project_id) {
-            alert('请选择所属项目');
-            return;
-        }
-
-        try {
-            const url = id ? `${API_BASE}/tasks/${id}` : `${API_BASE}/tasks`;
-            const method = id ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title, description, category_id, project_id, priority, status, progress, week_number
-                })
-            });
-
-            if (response.ok) {
-                this.closeTaskModal();
-                
-                // 刷新相应视图
-                if (this.currentProject) {
-                    await this.loadProjectTasks(this.currentProject);
-                } else if (this.currentTab === 'tasks') {
-                    await this.loadCategoryTasks();
-                } else if (this.currentView === 'weekly') {
-                    await this.loadWeeklyView();
-                }
-                
-                this.loadCategories(); // 更新统计
-            } else {
-                const error = await response.json();
-                alert('保存失败: ' + (error.error || '未知错误'));
-            }
-        } catch (error) {
-            console.error('保存事项失败:', error);
-            alert('保存失败');
-        }
-    },
-
-    async deleteTask() {
-        const id = document.getElementById('taskId').value;
-        if (!confirm('确定要删除这个事项吗？')) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`${API_BASE}/tasks/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                this.closeTaskModal();
-                
-                // 刷新相应视图
-                if (this.currentProject) {
-                    await this.loadProjectTasks(this.currentProject);
-                } else if (this.currentTab === 'tasks') {
-                    await this.loadCategoryTasks();
-                }
-                
-                this.loadCategories();
-            } else {
-                alert('删除失败');
-            }
-        } catch (error) {
-            console.error('删除事项失败:', error);
-            alert('删除失败');
-        }
-    },
+    // 旧的 showTaskModal 和相关函数已删除，统一使用 showQuickAddModal
 
     // ============ 每周视图 ============
 
@@ -1026,8 +842,11 @@ const app = {
 
     // ============ 快速添加事项 ============
 
-    async showQuickAddModal() {
+    async showQuickAddModal(taskId = null) {
         const modal = document.getElementById('quickAddModal');
+        const title = document.getElementById('quickAddModalTitle');
+        const deleteBtn = document.getElementById('quickDeleteTaskBtn');
+        const saveBtn = document.getElementById('quickSaveTaskBtn');
         
         // 加载所有分类
         if (this.categories.length === 0) {
@@ -1039,35 +858,72 @@ const app = {
         categorySelect.innerHTML = '<option value="">请选择分类</option>' + 
             this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
 
-        // 清空表单
-        document.getElementById('quickTaskTitle').value = '';
-        document.getElementById('quickTaskDescription').value = '';
-        document.getElementById('quickTaskStatus').value = 'todo';
-        document.getElementById('quickTaskWeek').value = this.currentWeek || '';
-        
-        // 重置优先级按钮
-        document.querySelectorAll('.priority-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.priority === 'p2') {
-                btn.classList.add('active');
-            }
-        });
-        this.quickAddPriority = 'p2';
-        
-        // 重置项目下拉框
-        const projectSelect = document.getElementById('quickTaskProject');
-        projectSelect.innerHTML = '<option value="">请先选择分类</option>';
-        projectSelect.disabled = true;
-
-        // 智能默认值：根据当前页面上下文
-        if (this.currentCategory) {
-            categorySelect.value = this.currentCategory;
-            await this.updateQuickProjectOptions();
+        if (taskId) {
+            // 编辑模式
+            const response = await fetch(`${API_BASE}/tasks/${taskId}`);
+            const task = await response.json();
             
-            // 如果在项目详情页，自动选中该项目
-            if (this.currentProject) {
-                projectSelect.value = this.currentProject;
+            title.textContent = '编辑事项';
+            saveBtn.textContent = '保存';
+            document.getElementById('quickTaskId').value = task.id;
+            document.getElementById('quickTaskTitle').value = task.title;
+            document.getElementById('quickTaskDescription').value = task.description || '';
+            document.getElementById('quickTaskCategory').value = task.category_id || '';
+            document.getElementById('quickTaskStatus').value = task.status;
+            document.getElementById('quickTaskProgress').value = task.progress;
+            document.getElementById('quickTaskWeek').value = task.week_number || '';
+            
+            // 设置优先级
+            this.quickAddPriority = task.priority;
+            document.querySelectorAll('.priority-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.priority === task.priority) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // 加载该分类的项目
+            await this.updateQuickProjectOptions();
+            document.getElementById('quickTaskProject').value = task.project_id;
+            
+            deleteBtn.style.display = 'inline-block';
+        } else {
+            // 新建模式
+            title.textContent = '快速添加事项';
+            saveBtn.textContent = '创建事项';
+            document.getElementById('quickTaskId').value = '';
+            document.getElementById('quickTaskTitle').value = '';
+            document.getElementById('quickTaskDescription').value = '';
+            document.getElementById('quickTaskStatus').value = 'todo';
+            document.getElementById('quickTaskProgress').value = '0';
+            document.getElementById('quickTaskWeek').value = this.currentWeek || '';
+            
+            // 重置优先级按钮
+            document.querySelectorAll('.priority-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.priority === 'p2') {
+                    btn.classList.add('active');
+                }
+            });
+            this.quickAddPriority = 'p2';
+            
+            // 重置项目下拉框
+            const projectSelect = document.getElementById('quickTaskProject');
+            projectSelect.innerHTML = '<option value="">请先选择分类</option>';
+            projectSelect.disabled = true;
+
+            // 智能默认值：根据当前页面上下文
+            if (this.currentCategory) {
+                categorySelect.value = this.currentCategory;
+                await this.updateQuickProjectOptions();
+                
+                // 如果在项目详情页，自动选中该项目
+                if (this.currentProject) {
+                    projectSelect.value = this.currentProject;
+                }
             }
+            
+            deleteBtn.style.display = 'none';
         }
 
         modal.classList.add('active');
@@ -1118,12 +974,14 @@ const app = {
     },
 
     async saveQuickTask() {
+        const id = document.getElementById('quickTaskId').value;
         const title = document.getElementById('quickTaskTitle').value.trim();
         const description = document.getElementById('quickTaskDescription').value.trim();
         const category_id = document.getElementById('quickTaskCategory').value || null;
         const project_id = document.getElementById('quickTaskProject').value;
         const priority = this.quickAddPriority;
         const status = document.getElementById('quickTaskStatus').value;
+        const progress = parseInt(document.getElementById('quickTaskProgress').value) || 0;
         const week_number = parseInt(document.getElementById('quickTaskWeek').value) || null;
 
         // 表单验证
@@ -1144,8 +1002,11 @@ const app = {
         }
 
         try {
-            const response = await fetch(`${API_BASE}/tasks`, {
-                method: 'POST',
+            const url = id ? `${API_BASE}/tasks/${id}` : `${API_BASE}/tasks`;
+            const method = id ? 'PUT' : 'POST';
+            
+            const response = await fetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
@@ -1154,14 +1015,15 @@ const app = {
                     project_id,
                     priority,
                     status,
-                    progress: 0,
+                    progress,
                     week_number
                 })
             });
 
             if (response.ok) {
                 // 显示成功提示
-                this.showToast('事项创建成功！', 'success');
+                const message = id ? '事项更新成功！' : '事项创建成功！';
+                this.showToast(message, 'success');
                 
                 // 关闭模态框
                 this.closeQuickAddModal();
@@ -1184,11 +1046,45 @@ const app = {
                 this.loadCategories(); // 更新统计
             } else {
                 const error = await response.json();
-                alert('创建失败: ' + (error.error || '未知错误'));
+                alert('保存失败: ' + (error.error || '未知错误'));
             }
         } catch (error) {
-            console.error('创建事项失败:', error);
-            alert('创建失败，请检查网络连接');
+            console.error('保存事项失败:', error);
+            alert('保存失败，请检查网络连接');
+        }
+    },
+
+    async deleteQuickTask() {
+        const id = document.getElementById('quickTaskId').value;
+        if (!confirm('确定要删除这个事项吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/tasks/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showToast('事项删除成功！', 'success');
+                this.closeQuickAddModal();
+                
+                // 刷新相应视图
+                if (this.currentProject) {
+                    await this.loadProjectTasks(this.currentProject);
+                } else if (this.currentTab === 'tasks') {
+                    await this.loadCategoryTasks();
+                } else if (this.currentView === 'weekly') {
+                    await this.loadWeeklyView();
+                }
+                
+                this.loadCategories();
+            } else {
+                alert('删除失败');
+            }
+        } catch (error) {
+            console.error('删除事项失败:', error);
+            alert('删除失败');
         }
     },
 
