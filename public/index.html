@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目管理系统</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="top-nav">
+        <h1>项目管理系统</h1>
+        <div class="nav-buttons">
+            <button class="nav-btn active" data-view="categories">分类管理</button>
+            <button class="nav-btn" data-view="weekly">每周视图</button>
+            <button class="nav-btn" data-view="report">周报生成</button>
+        </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <h3>快速访问</h3>
+            <div class="sidebar-categories" id="sidebarCategories">
+                <!-- 动态加载分类 -->
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="content">
+            <!-- 分类管理视图 -->
+            <div id="categoriesView" class="view active">
+                <div class="view-header">
+                    <h2>分类管理</h2>
+                    <button class="btn btn-primary" onclick="app.showCategoryModal()">+ 新建分类</button>
+                </div>
+                <div class="categories-grid" id="categoriesGrid">
+                    <!-- 动态加载分类卡片 -->
+                </div>
+            </div>
+
+            <!-- 单类事项视图 -->
+            <div id="categoryDetailView" class="view">
+                <div class="view-header">
+                    <button class="btn btn-secondary" onclick="app.showView('categories')">← 返回</button>
+                    <h2 id="categoryDetailTitle"></h2>
+                    <button class="btn btn-primary" onclick="app.showTaskModal()">+ 新建事项</button>
+                </div>
+                <div class="tasks-list" id="tasksList">
+                    <!-- 动态加载事项列表 -->
+                </div>
+            </div>
+
+            <!-- 每周视图 -->
+            <div id="weeklyView" class="view">
+                <div class="view-header">
+                    <div class="week-nav">
+                        <button class="btn btn-secondary" onclick="app.changeWeek(-1)">← 上一周</button>
+                        <h2 id="weekTitle"></h2>
+                        <button class="btn btn-secondary" onclick="app.changeWeek(1)">下一周 →</button>
+                    </div>
+                </div>
+                <div class="week-stats" id="weekStats">
+                    <!-- 周统计数据 -->
+                </div>
+                <div class="week-tasks" id="weekTasks">
+                    <!-- 按优先级分组的任务 -->
+                </div>
+            </div>
+
+            <!-- 周报生成视图 -->
+            <div id="reportView" class="view">
+                <div class="view-header">
+                    <h2>周报生成</h2>
+                    <div>
+                        <select id="reportWeekSelect" onchange="app.loadWeeklyReport()">
+                            <!-- 动态加载周次选项 -->
+                        </select>
+                        <button class="btn btn-primary" onclick="app.copyReport()">复制到剪贴板</button>
+                        <button class="btn btn-secondary" onclick="app.downloadReport()">下载Markdown</button>
+                    </div>
+                </div>
+                <div class="report-content" id="reportContent">
+                    <!-- 周报内容 -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 分类模态框 -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="categoryModalTitle">新建分类</h3>
+                <span class="close" onclick="app.closeCategoryModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="categoryId">
+                <div class="form-group">
+                    <label>分类名称</label>
+                    <input type="text" id="categoryName" placeholder="请输入分类名称" required>
+                </div>
+                <div class="form-group">
+                    <label>分类描述</label>
+                    <textarea id="categoryDescription" placeholder="请输入分类描述" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="app.closeCategoryModal()">取消</button>
+                <button class="btn btn-danger" id="deleteCategoryBtn" onclick="app.deleteCategory()" style="display:none;">删除</button>
+                <button class="btn btn-primary" onclick="app.saveCategory()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 事项模态框 -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="taskModalTitle">新建事项</h3>
+                <span class="close" onclick="app.closeTaskModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="taskId">
+                <div class="form-row">
+                    <div class="form-group flex-2">
+                        <label>事项标题 *</label>
+                        <input type="text" id="taskTitle" placeholder="请输入事项标题" required>
+                    </div>
+                    <div class="form-group">
+                        <label>所属分类</label>
+                        <select id="taskCategory">
+                            <!-- 动态加载分类选项 -->
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>详细描述</label>
+                    <textarea id="taskDescription" placeholder="请输入详细描述" rows="4"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <select id="taskPriority">
+                            <option value="p0">P0 - 最高</option>
+                            <option value="p1">P1 - 高</option>
+                            <option value="p2" selected>P2 - 普通</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>状态</label>
+                        <select id="taskStatus">
+                            <option value="todo" selected>待办</option>
+                            <option value="doing">进行中</option>
+                            <option value="done">已完成</option>
+                            <option value="backlog">Backlog</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>进度 (%)</label>
+                        <input type="number" id="taskProgress" min="0" max="100" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>计划周次</label>
+                        <input type="number" id="taskWeek" placeholder="如: 47">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="app.closeTaskModal()">取消</button>
+                <button class="btn btn-danger" id="deleteTaskBtn" onclick="app.deleteTask()" style="display:none;">删除</button>
+                <button class="btn btn-primary" onclick="app.saveTask()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
