@@ -22,8 +22,42 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
 .top-nav h1 {
     font-size: 1.5rem;
+}
+
+.btn-quick-add {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-quick-add:hover {
+    background-color: #229954;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-quick-add .plus-icon {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1;
 }
 
 .nav-buttons {
@@ -776,6 +810,61 @@ body {
 
 .form-row .form-group.flex-2 {
     flex: 2;
+}
+
+/* 优先级按钮组 */
+.priority-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.priority-btn {
+    flex: 1;
+    padding: 0.625rem;
+    border: 2px solid #ddd;
+    background-color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.priority-btn:hover {
+    transform: translateY(-1px);
+}
+
+.priority-btn.p0 {
+    color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.priority-btn.p0:hover,
+.priority-btn.p0.active {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.priority-btn.p1 {
+    color: #f39c12;
+    border-color: #f39c12;
+}
+
+.priority-btn.p1:hover,
+.priority-btn.p1.active {
+    background-color: #f39c12;
+    color: white;
+}
+
+.priority-btn.p2 {
+    color: #3498db;
+    border-color: #3498db;
+}
+
+.priority-btn.p2:hover,
+.priority-btn.p2.active {
+    background-color: #3498db;
+    color: white;
 }
 
 /* 响应式设计 */

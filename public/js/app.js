@@ -12,8 +12,7 @@ const app = {
     projects: [],
     tasks: [],
     allProjects: [],
-
-    // 初始化应用
+    quickAddPriority: 'p2',    // 初始化应用
     init() {
         this.setupNavigation();
         this.loadCategories();
@@ -1023,6 +1022,246 @@ const app = {
         a.download = `wk${weekNumber}.md`;
         a.click();
         URL.revokeObjectURL(url);
+    },
+
+    // ============ 快速添加事项 ============
+
+    async showQuickAddModal() {
+        const modal = document.getElementById('quickAddModal');
+        
+        // 加载所有分类
+        if (this.categories.length === 0) {
+            await this.loadCategories();
+        }
+
+        // 填充分类选项
+        const categorySelect = document.getElementById('quickTaskCategory');
+        categorySelect.innerHTML = '<option value="">请选择分类</option>' + 
+            this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+
+        // 清空表单
+        document.getElementById('quickTaskTitle').value = '';
+        document.getElementById('quickTaskDescription').value = '';
+        document.getElementById('quickTaskStatus').value = 'todo';
+        document.getElementById('quickTaskWeek').value = this.currentWeek || '';
+        
+        // 重置优先级按钮
+        document.querySelectorAll('.priority-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.priority === 'p2') {
+                btn.classList.add('active');
+            }
+        });
+        this.quickAddPriority = 'p2';
+        
+        // 重置项目下拉框
+        const projectSelect = document.getElementById('quickTaskProject');
+        projectSelect.innerHTML = '<option value="">请先选择分类</option>';
+        projectSelect.disabled = true;
+
+        // 智能默认值：根据当前页面上下文
+        if (this.currentCategory) {
+            categorySelect.value = this.currentCategory;
+            await this.updateQuickProjectOptions();
+            
+            // 如果在项目详情页，自动选中该项目
+            if (this.currentProject) {
+                projectSelect.value = this.currentProject;
+            }
+        }
+
+        modal.classList.add('active');
+    },
+
+    closeQuickAddModal() {
+        document.getElementById('quickAddModal').classList.remove('active');
+    },
+
+    selectQuickPriority(priority) {
+        this.quickAddPriority = priority;
+        document.querySelectorAll('.priority-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.priority === priority) {
+                btn.classList.add('active');
+            }
+        });
+    },
+
+    async updateQuickProjectOptions() {
+        const categoryId = document.getElementById('quickTaskCategory').value;
+        const projectSelect = document.getElementById('quickTaskProject');
+        
+        if (!categoryId) {
+            projectSelect.innerHTML = '<option value="">请先选择分类</option>';
+            projectSelect.disabled = true;
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/categories/${categoryId}/projects`);
+            const projects = await response.json();
+            
+            projectSelect.innerHTML = projects.map(p => 
+                `<option value="${p.id}">${p.name}${p.is_default ? ' (默认)' : ''}</option>`
+            ).join('');
+            projectSelect.disabled = false;
+            
+            // 自动选中默认项目
+            const defaultProject = projects.find(p => p.is_default);
+            if (defaultProject) {
+                projectSelect.value = defaultProject.id;
+            }
+        } catch (error) {
+            console.error('加载项目选项失败:', error);
+            projectSelect.innerHTML = '<option value="">加载失败</option>';
+        }
+    },
+
+    async saveQuickTask() {
+        const title = document.getElementById('quickTaskTitle').value.trim();
+        const description = document.getElementById('quickTaskDescription').value.trim();
+        const category_id = document.getElementById('quickTaskCategory').value || null;
+        const project_id = document.getElementById('quickTaskProject').value;
+        const priority = this.quickAddPriority;
+        const status = document.getElementById('quickTaskStatus').value;
+        const week_number = parseInt(document.getElementById('quickTaskWeek').value) || null;
+
+        // 表单验证
+        if (!title) {
+            alert('请输入事项标题');
+            document.getElementById('quickTaskTitle').focus();
+            return;
+        }
+
+        if (!category_id) {
+            alert('请选择分类');
+            return;
+        }
+
+        if (!project_id) {
+            alert('请选择项目');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/tasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    description,
+                    category_id,
+                    project_id,
+                    priority,
+                    status,
+                    progress: 0,
+                    week_number
+                })
+            });
+
+            if (response.ok) {
+                // 显示成功提示
+                this.showToast('事项创建成功！', 'success');
+                
+                // 关闭模态框
+                this.closeQuickAddModal();
+                
+                // 刷新相关视图
+                if (this.currentView === 'categories' && !this.currentCategory) {
+                    this.loadCategories();
+                } else if (this.currentCategory) {
+                    if (this.currentProject && project_id == this.currentProject) {
+                        await this.loadProjectTasks(this.currentProject);
+                    } else if (this.currentTab === 'tasks' && category_id == this.currentCategory) {
+                        await this.loadCategoryTasks();
+                    } else if (this.currentTab === 'projects') {
+                        await this.loadProjects(this.currentCategory);
+                    }
+                } else if (this.currentView === 'weekly') {
+                    await this.loadWeeklyView();
+                }
+                
+                this.loadCategories(); // 更新统计
+            } else {
+                const error = await response.json();
+                alert('创建失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('创建事项失败:', error);
+            alert('创建失败，请检查网络连接');
+        }
+    },
+
+    // 显示提示消息
+    showToast(message, type = 'info') {
+        // 创建 toast 元素
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        // 添加样式（如果还没有）
+        if (!document.getElementById('toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.textContent = `
+                .toast {
+                    position: fixed;
+                    top: 80px;
+                    right: 20px;
+                    padding: 1rem 1.5rem;
+                    background-color: white;
+                    border-radius: 6px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    z-index: 2000;
+                    animation: slideIn 0.3s ease-out;
+                    font-size: 0.9375rem;
+                    font-weight: 500;
+                }
+                .toast-success {
+                    border-left: 4px solid #27ae60;
+                    color: #27ae60;
+                }
+                .toast-error {
+                    border-left: 4px solid #e74c3c;
+                    color: #e74c3c;
+                }
+                .toast-info {
+                    border-left: 4px solid #3498db;
+                    color: #3498db;
+                }
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(400px);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                @keyframes slideOut {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(400px);
+                        opacity: 0;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(toast);
+        
+        // 3秒后移除
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => {
+                document.body.removeChild(toast);
+            }, 300);
+        }, 3000);
     }
 };
 
