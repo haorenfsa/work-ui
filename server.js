@@ -1,7 +1,20 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { setupDatabase, initDatabase, initDefaultData, query, run, get } = require('./database');
+const { 
+  setupDatabase, 
+  initDatabase, 
+  initDefaultData, 
+  query, 
+  run, 
+  get,
+  switchDatabase,
+  createDatabase,
+  deleteDatabase,
+  renameDatabase,
+  getAllDatabases,
+  getCurrentDbInfo
+} = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -517,6 +530,96 @@ async function startServer() {
       `, [week_number, task_id, log_type, content, log_date]);
       
       res.json({ id: result.lastInsertRowid, ...req.body });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============ 数据库管理 API ============
+
+  // 获取所有数据库列表
+  app.get('/api/databases', async (req, res) => {
+    try {
+      const databases = await getAllDatabases();
+      res.json(databases);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 获取当前数据库信息
+  app.get('/api/databases/current', (req, res) => {
+    try {
+      const info = getCurrentDbInfo();
+      res.json(info);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 切换数据库
+  app.post('/api/databases/switch', async (req, res) => {
+    try {
+      const { dbName } = req.body;
+      if (!dbName) {
+        return res.status(400).json({ error: 'Database name is required' });
+      }
+      
+      const result = await switchDatabase(dbName);
+      res.json(result);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 创建新数据库
+  app.post('/api/databases', async (req, res) => {
+    try {
+      const { dbName, displayName, description } = req.body;
+      
+      if (!dbName) {
+        return res.status(400).json({ error: 'Database name is required' });
+      }
+      
+      // 验证文件名格式
+      if (!/^[a-zA-Z0-9_-]+\.db$/.test(dbName)) {
+        return res.status(400).json({ 
+          error: 'Invalid database name. Use format: name.db' 
+        });
+      }
+      
+      const result = await createDatabase(dbName, displayName, description);
+      res.json(result);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 重命名数据库
+  app.put('/api/databases/:dbName', (req, res) => {
+    try {
+      const { dbName } = req.params;
+      const { displayName, description } = req.body;
+      
+      const result = renameDatabase(dbName, displayName, description);
+      res.json(result);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 删除数据库
+  app.delete('/api/databases/:dbName', (req, res) => {
+    try {
+      const { dbName } = req.params;
+      const result = deleteDatabase(dbName);
+      res.json(result);
     } catch (error) {
       console.error('Error:', error);
       res.status(500).json({ error: error.message });

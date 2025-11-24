@@ -60,6 +60,33 @@ body {
     line-height: 1;
 }
 
+/* 数据库切换按钮 */
+.btn-db-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #5a67d8;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-db-switch:hover {
+    background-color: #4c51bf;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-db-switch .db-icon {
+    font-size: 1.125rem;
+}
+
 .nav-buttons {
     display: flex;
     gap: 0.5rem;
@@ -908,4 +935,195 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+/* ============ 数据库管理样式 ============ */
+
+/* 当前数据库信息卡片 */
+.current-db-info {
+    margin-bottom: 1.5rem;
+}
+
+.current-db-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.current-db-card .db-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.current-db-card h4 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.current-badge {
+    background-color: rgba(255,255,255,0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.current-db-card .db-description {
+    margin: 0.5rem 0 1rem 0;
+    opacity: 0.9;
+}
+
+.current-db-card .db-stats {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.current-db-card .db-stats span {
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.current-db-card .db-meta {
+    display: flex;
+    gap: 1.5rem;
+    opacity: 0.8;
+    font-size: 0.8125rem;
+}
+
+/* 数据库列表 */
+.db-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.db-list-header h4 {
+    margin: 0;
+}
+
+.database-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.db-card {
+    background-color: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: all 0.2s;
+}
+
+.db-card:hover {
+    border-color: #cbd5e0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.db-card.current {
+    border-color: #667eea;
+    background-color: #f7fafc;
+}
+
+.db-card .db-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 0.75rem;
+}
+
+.db-card h5 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.125rem;
+    color: #2d3748;
+}
+
+.db-card .db-filename {
+    color: #718096;
+    font-size: 0.75rem;
+}
+
+.db-card .current-badge {
+    background-color: #667eea;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+.db-card .db-description {
+    color: #4a5568;
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.db-card .db-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.8125rem;
+    color: #718096;
+}
+
+.db-card .db-meta {
+    margin-bottom: 1rem;
+    font-size: 0.75rem;
+    color: #a0aec0;
+}
+
+.db-card .db-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* 新建数据库表单 */
+.create-db-form {
+    background-color: #f7fafc;
+    border: 2px dashed #cbd5e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.create-db-form h4 {
+    margin: 0 0 1rem 0;
+    color: #2d3748;
+}
+
+.create-db-form .form-group small {
+    display: block;
+    margin-top: 0.25rem;
+    color: #718096;
+    font-size: 0.75rem;
+}
+
+.create-db-form .form-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+/* 按钮尺寸变体 */
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
+/* 空状态消息 */
+.empty-message {
+    text-align: center;
+    color: #a0aec0;
+    padding: 2rem;
+    font-style: italic;
 }

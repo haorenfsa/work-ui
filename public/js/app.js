@@ -12,9 +12,13 @@ const app = {
     projects: [],
     tasks: [],
     allProjects: [],
-    quickAddPriority: 'p2',    // 初始化应用
-    init() {
+    quickAddPriority: 'p2',
+    currentDbName: null,
+    
+    // 初始化应用
+    async init() {
         this.setupNavigation();
+        await this.loadCurrentDatabase();
         this.loadCategories();
         this.currentWeek = this.getCurrentWeekNumber();
         this.setupWeekOptions();
@@ -1172,6 +1176,294 @@ const app = {
                 document.body.removeChild(toast);
             }, 300);
         }, 3000);
+    },
+
+    // ============ 数据库管理 ============
+    
+    // 加载当前数据库信息
+    async loadCurrentDatabase() {
+        try {
+            const response = await fetch(`${API_BASE}/databases/current`);
+            const dbInfo = await response.json();
+            this.currentDbName = dbInfo.name;
+            document.getElementById('currentDbName').textContent = 
+                dbInfo.displayName || dbInfo.name;
+        } catch (error) {
+            console.error('加载数据库信息失败:', error);
+        }
+    },
+    
+    async showDatabaseModal() {
+        const modal = document.getElementById('databaseModal');
+        await this.loadDatabaseList();
+        modal.classList.add('active');
+    },
+    
+    closeDatabaseModal() {
+        document.getElementById('databaseModal').classList.remove('active');
+        this.hideCreateDbForm();
+    },
+    
+    async loadDatabaseList() {
+        try {
+            const response = await fetch(`${API_BASE}/databases`);
+            const databases = await response.json();
+            
+            this.renderCurrentDbInfo(databases.find(db => db.isCurrent));
+            this.renderDatabaseList(databases);
+        } catch (error) {
+            console.error('加载数据库列表失败:', error);
+            alert('加载数据库列表失败');
+        }
+    },
+    
+    renderCurrentDbInfo(currentDb) {
+        const container = document.getElementById('currentDbInfo');
+        if (!currentDb) {
+            container.innerHTML = '<p>无法获取当前数据库信息</p>';
+            return;
+        }
+        
+        container.innerHTML = `
+            <div class="current-db-card">
+                <div class="db-card-header">
+                    <h4>${currentDb.displayName}</h4>
+                    <span class="current-badge">当前</span>
+                </div>
+                <p class="db-description">${currentDb.description || '暂无描述'}</p>
+                <div class="db-stats">
+                    <span>${currentDb.stats.categories} 个分类</span>
+                    <span>${currentDb.stats.projects} 个项目</span>
+                    <span>${currentDb.stats.tasks} 个事项</span>
+                </div>
+                <div class="db-meta">
+                    <small>创建时间: ${new Date(currentDb.createdAt).toLocaleString('zh-CN')}</small>
+                    <small>最后使用: ${new Date(currentDb.lastUsed).toLocaleString('zh-CN')}</small>
+                </div>
+            </div>
+        `;
+    },
+    
+    renderDatabaseList(databases) {
+        const container = document.getElementById('databaseList');
+        
+        if (databases.length === 0) {
+            container.innerHTML = '<p class="empty-message">暂无其他数据库</p>';
+            return;
+        }
+        
+        container.innerHTML = databases.map(db => `
+            <div class="db-card ${db.isCurrent ? 'current' : ''}">
+                <div class="db-card-header">
+                    <div>
+                        <h5>${db.displayName}</h5>
+                        <small class="db-filename">${db.name}</small>
+                    </div>
+                    ${db.isCurrent ? '<span class="current-badge">当前</span>' : ''}
+                </div>
+                
+                <p class="db-description">${db.description || '暂无描述'}</p>
+                
+                <div class="db-stats">
+                    <span>📁 ${db.stats.categories} 分类</span>
+                    <span>📊 ${db.stats.projects} 项目</span>
+                    <span>✅ ${db.stats.tasks} 事项</span>
+                </div>
+                
+                <div class="db-meta">
+                    <small>最后使用: ${this.formatRelativeTime(db.lastUsed)}</small>
+                </div>
+                
+                <div class="db-actions">
+                    ${!db.isCurrent ? `
+                        <button class="btn btn-primary btn-sm" 
+                                onclick="app.switchDatabase('${db.name}')">
+                            切换
+                        </button>
+                    ` : ''}
+                    <button class="btn btn-secondary btn-sm" 
+                            onclick="app.renameDatabase('${db.name}')">
+                        重命名
+                    </button>
+                    ${!db.isCurrent ? `
+                        <button class="btn btn-danger btn-sm" 
+                                onclick="app.deleteDatabase('${db.name}')">
+                            删除
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('');
+    },
+    
+    formatRelativeTime(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return '刚刚';
+        if (diffMins < 60) return `${diffMins} 分钟前`;
+        if (diffHours < 24) return `${diffHours} 小时前`;
+        if (diffDays < 7) return `${diffDays} 天前`;
+        
+        return date.toLocaleDateString('zh-CN');
+    },
+    
+    async switchDatabase(dbName) {
+        if (!confirm(`确定要切换到数据库 "${dbName}" 吗？`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/databases/switch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dbName })
+            });
+            
+            if (response.ok) {
+                this.showToast('数据库切换成功！', 'success');
+                this.closeDatabaseModal();
+                
+                // 刷新页面以加载新数据库的数据
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            } else {
+                const error = await response.json();
+                alert('切换失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('切换数据库失败:', error);
+            alert('切换失败');
+        }
+    },
+    
+    showCreateDbForm() {
+        document.getElementById('createDbForm').style.display = 'block';
+        document.getElementById('newDbName').focus();
+    },
+    
+    hideCreateDbForm() {
+        document.getElementById('createDbForm').style.display = 'none';
+        document.getElementById('newDbName').value = '';
+        document.getElementById('newDbDisplayName').value = '';
+        document.getElementById('newDbDescription').value = '';
+    },
+    
+    async createDatabase() {
+        const dbName = document.getElementById('newDbName').value.trim();
+        const displayName = document.getElementById('newDbDisplayName').value.trim();
+        const description = document.getElementById('newDbDescription').value.trim();
+        
+        // 验证
+        if (!dbName) {
+            alert('请输入数据库文件名');
+            return;
+        }
+        
+        if (!/^[a-zA-Z0-9_-]+\.db$/.test(dbName)) {
+            alert('文件名格式不正确，请使用格式: name.db\n只能包含字母、数字、下划线和连字符');
+            return;
+        }
+        
+        if (!displayName) {
+            alert('请输入显示名称');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/databases`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dbName, displayName, description })
+            });
+            
+            if (response.ok) {
+                this.showToast('数据库创建成功！', 'success');
+                this.hideCreateDbForm();
+                
+                // 刷新页面以加载新数据库
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            } else {
+                const error = await response.json();
+                alert('创建失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('创建数据库失败:', error);
+            alert('创建失败');
+        }
+    },
+    
+    async renameDatabase(dbName) {
+        const newDisplayName = prompt('请输入新的显示名称:');
+        if (!newDisplayName || !newDisplayName.trim()) {
+            return;
+        }
+        
+        const newDescription = prompt('请输入新的描述（可选）:');
+        
+        try {
+            const response = await fetch(`${API_BASE}/databases/${dbName}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    displayName: newDisplayName.trim(), 
+                    description: newDescription?.trim() 
+                })
+            });
+            
+            if (response.ok) {
+                this.showToast('重命名成功！', 'success');
+                await this.loadDatabaseList();
+                
+                // 如果重命名的是当前数据库，更新导航栏显示
+                if (dbName === this.currentDbName) {
+                    await this.loadCurrentDatabase();
+                }
+            } else {
+                const error = await response.json();
+                alert('重命名失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('重命名失败:', error);
+            alert('重命名失败');
+        }
+    },
+    
+    async deleteDatabase(dbName) {
+        if (!confirm(`确定要删除数据库 "${dbName}" 吗？\n\n此操作不可恢复！`)) {
+            return;
+        }
+        
+        // 二次确认
+        const confirmText = prompt('请输入数据库文件名以确认删除:');
+        if (confirmText !== dbName) {
+            alert('文件名不匹配，取消删除');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/databases/${dbName}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                this.showToast('数据库已删除', 'success');
+                await this.loadDatabaseList();
+            } else {
+                const error = await response.json();
+                alert('删除失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('删除失败:', error);
+            alert('删除失败');
+        }
     }
 };
 

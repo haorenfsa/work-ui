@@ -1,4 +1,6 @@
 node_modules/
 data.db
+personal.db
+db-config.json
 *.log
 .DS_Store
