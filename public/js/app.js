@@ -594,9 +594,21 @@ const app = {
     getCurrentWeekNumber() {
         const now = new Date();
         const start = new Date(now.getFullYear(), 0, 1);
+        
+        // 获取1月1日是周几 (0=周日, 1=周一, ..., 6=周六)
+        const startDay = start.getDay();
+        
+        // 计算从年初到现在经过的天数
         const diff = now - start;
-        const oneWeek = 1000 * 60 * 60 * 24 * 7;
-        return Math.ceil(diff / oneWeek);
+        const daysPassed = Math.floor(diff / (1000 * 60 * 60 * 24));
+        
+        // 调整：如果1月1日不是周一，需要加上偏移量
+        // 例如：如果1月1日是周三(3)，那么第一周从周一开始应该是在1月1日之前2天
+        // 使用周一作为一周的开始（周一=1，周日=0，需要调整为周一=0）
+        const adjustedStartDay = startDay === 0 ? 6 : startDay - 1; // 周日变成6，周一变成0
+        
+        // 计算周数：(已过天数 + 开始日偏移) / 7，向上取整
+        return Math.ceil((daysPassed + adjustedStartDay + 1) / 7);
     },
 
     // 获取默认周次：周五、周六、周日时返回下一周
