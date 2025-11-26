@@ -25,8 +25,63 @@ const app = {
         this.setupNavigation();
         await this.loadCurrentDatabase();
         this.loadCategories();
-        this.currentWeek = this.getCurrentWeekNumber();
+        
+        // 从 URL 读取参数
+        const params = this.parseUrlParams();
+        
+        // 设置视图和周次
+        this.currentWeek = params.week || this.getCurrentWeekNumber();
         this.setupWeekOptions();
+        
+        // 应用视图
+        if (params.view === 'weekly') {
+            this.weekFilters.projectId = params.project || '';
+            this.weekFilters.status = params.status || '';
+            this.showView('weekly');
+        } else if (params.view === 'report') {
+            this.showView('report');
+        } else {
+            this.showView('categories');
+        }
+    },
+
+    // 解析 URL 参数
+    parseUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return {
+            view: urlParams.get('view'),
+            week: urlParams.get('week') ? parseInt(urlParams.get('week')) : null,
+            project: urlParams.get('project') || '',
+            status: urlParams.get('status') || ''
+        };
+    },
+
+    // 更新 URL（不刷新页面）
+    updateUrl() {
+        const params = new URLSearchParams();
+        
+        // 只有非默认视图才添加 view 参数
+        if (this.currentView !== 'categories') {
+            params.set('view', this.currentView);
+        }
+        
+        // 每周视图特定参数
+        if (this.currentView === 'weekly') {
+            params.set('week', this.currentWeek);
+            
+            if (this.weekFilters.projectId) {
+                params.set('project', this.weekFilters.projectId);
+            }
+            
+            if (this.weekFilters.status) {
+                params.set('status', this.weekFilters.status);
+            }
+        }
+        
+        // 更新 URL，不刷新页面
+        const queryString = params.toString();
+        const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+        window.history.pushState({ path: newUrl }, '', newUrl);
     },
 
     // 设置导航
@@ -36,6 +91,22 @@ const app = {
                 const view = e.target.dataset.view;
                 this.showView(view);
             });
+        });
+        
+        // 监听浏览器前进/后退
+        window.addEventListener('popstate', () => {
+            const params = this.parseUrlParams();
+            
+            if (params.view === 'weekly') {
+                this.currentWeek = params.week || this.getCurrentWeekNumber();
+                this.weekFilters.projectId = params.project || '';
+                this.weekFilters.status = params.status || '';
+                this.showView('weekly');
+            } else if (params.view === 'report') {
+                this.showView('report');
+            } else {
+                this.showView('categories');
+            }
         });
     },
 
@@ -70,6 +141,9 @@ const app = {
                 this.loadWeeklyReport();
                 break;
         }
+        
+        // 更新 URL
+        this.updateUrl();
     },
 
     // ============ Tab 切换 ============
@@ -641,6 +715,10 @@ const app = {
             // 加载所有项目用于筛选
             await this.loadWeeklyProjects();
             
+            // 恢复筛选状态到 UI
+            document.getElementById('weekProjectFilter').value = this.weekFilters.projectId;
+            document.getElementById('weekStatusFilter').value = this.weekFilters.status;
+            
             // 应用筛选并渲染
             this.applyWeekFilters();
         } catch (error) {
@@ -706,6 +784,11 @@ const app = {
         // 渲染结果
         this.renderWeekStats(filteredTasks);
         this.renderWeekTasks(filteredTasks);
+        
+        // 更新 URL
+        if (this.currentView === 'weekly') {
+            this.updateUrl();
+        }
     },
     
     updateWeekFilterUI(projectId, status, resultCount) {
@@ -764,6 +847,11 @@ const app = {
         this.weekFilters.projectId = '';
         this.weekFilters.status = '';
         this.applyWeekFilters();
+        
+        // 更新 URL
+        if (this.currentView === 'weekly') {
+            this.updateUrl();
+        }
     },
 
     renderWeekStats(tasks) {
@@ -838,6 +926,11 @@ const app = {
     changeWeek(delta) {
         this.currentWeek += delta;
         this.loadWeeklyView();
+        
+        // 更新 URL
+        if (this.currentView === 'weekly') {
+            this.updateUrl();
+        }
     },
 
     // ============ 周报生成 ============
