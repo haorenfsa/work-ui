@@ -3,8 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const { 
   setupDatabase, 
-  initDatabase, 
-  initDefaultData, 
+  initDatabase,
   query, 
   run, 
   get,
@@ -28,7 +27,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 async function startServer() {
   await setupDatabase();
   initDatabase();
-  initDefaultData();
 
   // ============ 分类相关API ============
 
@@ -38,7 +36,7 @@ async function startServer() {
       const categories = query(`
         SELECT c.*, 
           COUNT(DISTINCT p.id) as project_count,
-          COUNT(t.id) as task_count,
+          COUNT(DISTINCT t.id) as task_count,
           SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count
         FROM categories c
         LEFT JOIN projects p ON c.id = p.category_id

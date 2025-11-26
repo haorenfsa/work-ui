@@ -152,16 +152,10 @@ function initDatabase() {
   console.log('Database initialized successfully');
 }
 
-// 初始化默认分类数据
+// 初始化数据
 function initDefaultData() {
   const categories = [
-    { name: 'BYOC', description: 'Bring Your Own Cloud 相关事项' },
-    { name: '跨云能力', description: '跨云部署和管理能力' },
-    { name: 'infra架构优化', description: '基础架构优化' },
-    { name: 'gateway', description: 'Gateway 网关相关' },
-    { name: '网络', description: '网络相关问题和优化' },
-    { name: '运维自动化', description: '运维和自动化工具' },
-    { name: '开源', description: '开源项目维护' }
+    { name: 'default', description: 'default example' },
   ];
 
   for (const cat of categories) {
@@ -265,7 +259,6 @@ async function createDatabase(dbName, displayName, description = '') {
   // 切换到新数据库并初始化
   await switchDatabase(dbName);
   initDatabase();
-  initDefaultData();
   
   return {
     success: true,
