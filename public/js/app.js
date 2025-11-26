@@ -14,6 +14,11 @@ const app = {
     allProjects: [],
     quickAddPriority: 'p2',
     currentDbName: null,
+    weeklyTasks: [],
+    weekFilters: {
+        projectId: '',
+        status: ''
+    },
     
     // 初始化应用
     async init() {
@@ -631,13 +636,134 @@ const app = {
         try {
             const response = await fetch(`${API_BASE}/tasks/week/${this.currentWeek}`);
             const tasks = await response.json();
+            this.weeklyTasks = tasks;
             
-            this.renderWeekStats(tasks);
-            this.renderWeekTasks(tasks);
+            // 加载所有项目用于筛选
+            await this.loadWeeklyProjects();
+            
+            // 应用筛选并渲染
+            this.applyWeekFilters();
         } catch (error) {
             console.error('加载每周视图失败:', error);
             alert('加载失败');
         }
+    },
+    
+    async loadWeeklyProjects() {
+        try {
+            const response = await fetch(`${API_BASE}/categories`);
+            const categories = await response.json();
+            
+            // 收集所有项目
+            const projectsMap = new Map();
+            
+            for (const category of categories) {
+                const projectsResponse = await fetch(`${API_BASE}/categories/${category.id}/projects`);
+                const projects = await projectsResponse.json();
+                
+                projects.forEach(project => {
+                    projectsMap.set(project.id, {
+                        id: project.id,
+                        name: project.name,
+                        categoryName: category.name
+                    });
+                });
+            }
+            
+            // 填充项目筛选下拉框
+            const projectFilter = document.getElementById('weekProjectFilter');
+            projectFilter.innerHTML = '<option value="">📁 全部项目</option>' +
+                Array.from(projectsMap.values()).map(p => 
+                    `<option value="${p.id}">${p.categoryName} / ${p.name}</option>`
+                ).join('');
+        } catch (error) {
+            console.error('加载项目列表失败:', error);
+        }
+    },
+    
+    applyWeekFilters() {
+        const projectId = document.getElementById('weekProjectFilter').value;
+        const status = document.getElementById('weekStatusFilter').value;
+        
+        // 更新筛选状态
+        this.weekFilters.projectId = projectId;
+        this.weekFilters.status = status;
+        
+        // 筛选任务
+        let filteredTasks = [...this.weeklyTasks];
+        
+        if (projectId) {
+            filteredTasks = filteredTasks.filter(t => t.project_id == projectId);
+        }
+        
+        if (status) {
+            filteredTasks = filteredTasks.filter(t => t.status === status);
+        }
+        
+        // 更新UI状态
+        this.updateWeekFilterUI(projectId, status, filteredTasks.length);
+        
+        // 渲染结果
+        this.renderWeekStats(filteredTasks);
+        this.renderWeekTasks(filteredTasks);
+    },
+    
+    updateWeekFilterUI(projectId, status, resultCount) {
+        const projectFilter = document.getElementById('weekProjectFilter');
+        const statusFilter = document.getElementById('weekStatusFilter');
+        const clearBtn = document.getElementById('clearWeekFiltersBtn');
+        const filterStatus = document.getElementById('weekFilterStatus');
+        const filterStatusText = document.getElementById('weekFilterStatusText');
+        
+        const hasFilter = projectId || status;
+        
+        // 更新下拉框样式
+        if (projectId) {
+            projectFilter.classList.add('filter-active');
+        } else {
+            projectFilter.classList.remove('filter-active');
+        }
+        
+        if (status) {
+            statusFilter.classList.add('filter-active');
+        } else {
+            statusFilter.classList.remove('filter-active');
+        }
+        
+        // 显示/隐藏清除按钮
+        clearBtn.style.display = hasFilter ? 'inline-block' : 'none';
+        
+        // 显示/隐藏筛选状态
+        if (hasFilter) {
+            filterStatus.style.display = 'flex';
+            
+            const projectName = projectId ? 
+                projectFilter.options[projectFilter.selectedIndex].text.replace('📁 ', '') : '';
+            const statusName = status ? 
+                statusFilter.options[statusFilter.selectedIndex].text.replace(/^[^\s]+\s/, '') : '';
+            
+            let statusText = '当前筛选: ';
+            if (projectName && statusName) {
+                statusText += `项目「${projectName}」+ 状态「${statusName}」`;
+            } else if (projectName) {
+                statusText += `项目「${projectName}」`;
+            } else if (statusName) {
+                statusText += `状态「${statusName}」`;
+            }
+            statusText += ` | 共找到 ${resultCount} 个事项`;
+            
+            filterStatusText.textContent = statusText;
+        } else {
+            filterStatus.style.display = 'none';
+        }
+    },
+    
+    clearWeekFilters() {
+        document.getElementById('weekProjectFilter').value = '';
+        document.getElementById('weekStatusFilter').value = '';
+        this.weekFilters.projectId = '';
+        this.weekFilters.status = '';
+        this.applyWeekFilters();
     },
 
     renderWeekStats(tasks) {
@@ -667,11 +793,24 @@ const app = {
     },
 
     renderWeekTasks(tasks) {
+        const container = document.getElementById('weekTasks');
+        
+        if (tasks.length === 0) {
+            container.innerHTML = `
+                <div class="week-empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>未找到符合条件的事项</h3>
+                    <p>尝试调整筛选条件或清除筛选重新查看</p>
+                    <button class="btn btn-secondary" onclick="app.clearWeekFilters()">清除筛选</button>
+                </div>
+            `;
+            return;
+        }
+        
         const p0Tasks = tasks.filter(t => t.priority === 'p0');
         const p1Tasks = tasks.filter(t => t.priority === 'p1');
         const p2Tasks = tasks.filter(t => t.priority === 'p2');
 
-        const container = document.getElementById('weekTasks');
         container.innerHTML = '';
 
         if (p0Tasks.length > 0) {
@@ -682,10 +821,6 @@ const app = {
         }
         if (p2Tasks.length > 0) {
             container.innerHTML += this.renderPriorityGroup('p2', 'P2 - 普通优先级', p2Tasks);
-        }
-
-        if (tasks.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:2rem; color:#6c757d;">本周暂无任务</div>';
         }
     },
 

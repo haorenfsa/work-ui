@@ -894,6 +894,114 @@ body {
     color: white;
 }
 
+/* 每周视图筛选栏 */
+.week-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9375rem;
+}
+
+.week-filter-bar select {
+    flex: 1;
+    padding: 0.625rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    background-color: white;
+    transition: all 0.2s;
+}
+
+.week-filter-bar select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+/* 筛选激活状态 */
+.week-filter-bar select.filter-active {
+    border-color: #3498db;
+    background-color: #f0f8ff;
+}
+
+.btn-clear-filter {
+    background-color: #95a5a6;
+    color: white;
+    white-space: nowrap;
+}
+
+.btn-clear-filter:hover {
+    background-color: #7f8c8d;
+}
+
+/* 筛选状态显示 */
+.week-filter-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: #e3f2fd;
+    border-left: 4px solid #3498db;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.filter-status-text {
+    flex: 1;
+    color: #2c3e50;
+    font-size: 0.9375rem;
+}
+
+.filter-status-clear {
+    background: none;
+    border: none;
+    color: #3498db;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.filter-status-clear:hover {
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+/* 空状态提示 */
+.week-empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.week-empty-state .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.week-empty-state h3 {
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+}
+
+.week-empty-state p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     .main-container {
@@ -915,6 +1023,14 @@ body {
     
     .form-row {
         flex-direction: column;
+    }
+    
+    .week-filter-bar {
+        flex-wrap: wrap;
+    }
+    
+    .week-filter-bar select {
+        min-width: 140px;
     }
 }
 

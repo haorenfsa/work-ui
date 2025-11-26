@@ -127,6 +127,29 @@
                         <button class="btn btn-secondary" onclick="app.changeWeek(1)">下一周 →</button>
                     </div>
                 </div>
+                
+                <!-- 筛选条件 -->
+                <div class="week-filter-bar">
+                    <div class="filter-label">筛选:</div>
+                    <select id="weekProjectFilter" onchange="app.applyWeekFilters()">
+                        <option value="">📁 全部项目</option>
+                    </select>
+                    <select id="weekStatusFilter" onchange="app.applyWeekFilters()">
+                        <option value="">🏷️ 全部状态</option>
+                        <option value="todo">📋 待办</option>
+                        <option value="doing">🔄 进行中</option>
+                        <option value="done">✅ 已完成</option>
+                        <option value="backlog">⏸️ backlog</option>
+                    </select>
+                    <button class="btn btn-clear-filter" onclick="app.clearWeekFilters()" id="clearWeekFiltersBtn" style="display:none;">🔄 清除筛选</button>
+                </div>
+                
+                <!-- 筛选状态显示 -->
+                <div class="week-filter-status" id="weekFilterStatus" style="display:none;">
+                    <div class="filter-status-text" id="weekFilterStatusText"></div>
+                    <button class="filter-status-clear" onclick="app.clearWeekFilters()">清除 ×</button>
+                </div>
+                
                 <div class="week-stats" id="weekStats">
                     <!-- 周统计数据 -->
                 </div>
