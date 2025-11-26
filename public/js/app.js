@@ -24,7 +24,7 @@ const app = {
     async init() {
         this.setupNavigation();
         await this.loadCurrentDatabase();
-        this.loadCategories();
+        await this.loadCategories();
         
         // 从 URL 读取参数
         const params = this.parseUrlParams();
@@ -41,7 +41,19 @@ const app = {
         } else if (params.view === 'report') {
             this.showView('report');
         } else {
+            // 分类管理视图
             this.showView('categories');
+            
+            // 如果有分类参数，显示分类详情
+            if (params.category) {
+                this.currentTab = params.tab || 'projects';
+                await this.showCategoryDetail(params.category);
+                
+                // 如果有项目参数，显示项目详情
+                if (params.project) {
+                    await this.showProjectDetail(parseInt(params.project));
+                }
+            }
         }
     },
 
@@ -52,7 +64,10 @@ const app = {
             view: urlParams.get('view'),
             week: urlParams.get('week') ? parseInt(urlParams.get('week')) : null,
             project: urlParams.get('project') || '',
-            status: urlParams.get('status') || ''
+            status: urlParams.get('status') || '',
+            // 分类管理相关参数
+            category: urlParams.get('category') ? parseInt(urlParams.get('category')) : null,
+            tab: urlParams.get('tab') || 'projects'
         };
     },
 
@@ -60,13 +75,25 @@ const app = {
     updateUrl() {
         const params = new URLSearchParams();
         
-        // 只有非默认视图才添加 view 参数
-        if (this.currentView !== 'categories') {
-            params.set('view', this.currentView);
+        // 分类管理视图参数
+        if (this.currentView === 'categories') {
+            if (this.currentCategory) {
+                params.set('category', this.currentCategory);
+                
+                // 项目详情
+                if (this.currentProject) {
+                    params.set('project', this.currentProject);
+                } 
+                // 分类详情的 tab
+                else if (this.currentTab !== 'projects') {
+                    params.set('tab', this.currentTab);
+                }
+            }
+            // 如果是分类列表视图，不添加任何参数
         }
-        
-        // 每周视图特定参数
-        if (this.currentView === 'weekly') {
+        // 每周视图参数
+        else if (this.currentView === 'weekly') {
+            params.set('view', 'weekly');
             params.set('week', this.currentWeek);
             
             if (this.weekFilters.projectId) {
@@ -76,6 +103,10 @@ const app = {
             if (this.weekFilters.status) {
                 params.set('status', this.weekFilters.status);
             }
+        }
+        // 其他视图
+        else {
+            params.set('view', this.currentView);
         }
         
         // 更新 URL，不刷新页面
@@ -94,7 +125,7 @@ const app = {
         });
         
         // 监听浏览器前进/后退
-        window.addEventListener('popstate', () => {
+        window.addEventListener('popstate', async () => {
             const params = this.parseUrlParams();
             
             if (params.view === 'weekly') {
@@ -105,7 +136,17 @@ const app = {
             } else if (params.view === 'report') {
                 this.showView('report');
             } else {
+                // 分类管理视图
                 this.showView('categories');
+                
+                if (params.category) {
+                    this.currentTab = params.tab || 'projects';
+                    await this.showCategoryDetail(params.category);
+                    
+                    if (params.project) {
+                        await this.showProjectDetail(parseInt(params.project));
+                    }
+                }
             }
         });
     },
@@ -174,6 +215,9 @@ const app = {
             document.getElementById('addTaskBtn').style.display = 'inline-block';
             this.loadCategoryTasks();
         }
+        
+        // 更新 URL
+        this.updateUrl();
     },
 
     // ============ 分类管理 ============
@@ -340,6 +384,9 @@ const app = {
 
         await this.loadProjects(categoryId);
         this.renderSidebar();
+        
+        // 更新 URL
+        this.updateUrl();
     },
 
     // ============ 项目管理 ============
@@ -510,12 +557,18 @@ const app = {
         document.getElementById('projectDetailView').classList.add('active');
 
         await this.loadProjectTasks(projectId);
+        
+        // 更新 URL
+        this.updateUrl();
     },
 
     backToCategoryDetail() {
         this.currentProject = null;
         document.getElementById('projectDetailView').classList.remove('active');
         document.getElementById('categoryDetailView').classList.add('active');
+        
+        // 更新 URL
+        this.updateUrl();
     },
 
     async loadProjectTasks(projectId) {
