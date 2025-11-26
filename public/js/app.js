@@ -324,8 +324,14 @@ const app = {
             });
 
             if (response.ok) {
+                this.showToast(id ? '分类更新成功！' : '分类创建成功！', 'success');
                 this.closeCategoryModal();
-                this.loadCategories();
+                await this.loadCategories();
+                
+                // 如果当前在分类详情页，刷新该分类
+                if (this.currentCategory) {
+                    await this.showCategoryDetail(this.currentCategory);
+                }
             } else {
                 alert('保存失败');
             }
@@ -347,8 +353,19 @@ const app = {
             });
 
             if (response.ok) {
+                this.showToast('分类删除成功！', 'success');
                 this.closeCategoryModal();
-                this.loadCategories();
+                
+                // 如果删除的是当前分类，返回分类列表
+                if (this.currentCategory == id) {
+                    this.currentCategory = null;
+                    this.currentProject = null;
+                    document.getElementById('categoryDetailView').classList.remove('active');
+                    document.getElementById('projectDetailView').classList.remove('active');
+                    document.getElementById('categoriesView').classList.add('active');
+                }
+                
+                await this.loadCategories();
             } else {
                 alert('删除失败');
             }
@@ -504,9 +521,21 @@ const app = {
             });
 
             if (response.ok) {
+                this.showToast(id ? '项目更新成功！' : '项目创建成功！', 'success');
                 this.closeProjectModal();
-                await this.loadProjects(this.currentCategory);
-                this.loadCategories(); // 更新统计
+                
+                // 刷新当前视图的项目列表
+                if (this.currentCategory) {
+                    await this.loadProjects(this.currentCategory);
+                }
+                
+                // 如果在项目详情页且是编辑该项目，刷新项目任务
+                if (id && this.currentProject == id) {
+                    await this.loadProjectTasks(this.currentProject);
+                }
+                
+                // 更新分类统计
+                await this.loadCategories();
             } else {
                 const error = await response.json();
                 alert('保存失败: ' + (error.error || '未知错误'));
@@ -529,9 +558,21 @@ const app = {
             });
 
             if (response.ok) {
+                this.showToast('项目删除成功！', 'success');
                 this.closeProjectModal();
-                await this.loadProjects(this.currentCategory);
-                this.loadCategories();
+                
+                // 如果删除的是当前项目，返回分类详情页
+                if (this.currentProject == id) {
+                    this.currentProject = null;
+                    document.getElementById('projectDetailView').classList.remove('active');
+                    document.getElementById('categoryDetailView').classList.add('active');
+                }
+                
+                // 刷新项目列表和统计
+                if (this.currentCategory) {
+                    await this.loadProjects(this.currentCategory);
+                }
+                await this.loadCategories();
             } else {
                 const error = await response.json();
                 alert('删除失败: ' + (error.error || '未知错误'));
@@ -1339,22 +1380,38 @@ const app = {
                 // 关闭模态框
                 this.closeQuickAddModal();
                 
-                // 刷新相关视图
-                if (this.currentView === 'categories' && !this.currentCategory) {
-                    this.loadCategories();
-                } else if (this.currentCategory) {
-                    if (this.currentProject && project_id == this.currentProject) {
-                        await this.loadProjectTasks(this.currentProject);
-                    } else if (this.currentTab === 'tasks' && category_id == this.currentCategory) {
-                        await this.loadCategoryTasks();
-                    } else if (this.currentTab === 'projects') {
-                        await this.loadProjects(this.currentCategory);
+                // 刷新所有相关视图
+                if (this.currentView === 'categories') {
+                    // 更新分类统计
+                    await this.loadCategories();
+                    
+                    if (this.currentCategory) {
+                        // 如果在项目详情页
+                        if (this.currentProject) {
+                            await this.loadProjectTasks(this.currentProject);
+                            // 同时刷新项目列表（更新统计）
+                            await this.loadProjects(this.currentCategory);
+                        }
+                        // 如果在分类的任务tab
+                        else if (this.currentTab === 'tasks') {
+                            await this.loadCategoryTasks();
+                            // 同时刷新项目列表（更新统计）
+                            await this.loadProjects(this.currentCategory);
+                        }
+                        // 如果在分类的项目tab
+                        else {
+                            await this.loadProjects(this.currentCategory);
+                        }
                     }
                 } else if (this.currentView === 'weekly') {
+                    // 刷新每周视图
                     await this.loadWeeklyView();
+                    // 同时更新分类统计（侧边栏可能显示）
+                    await this.loadCategories();
+                } else if (this.currentView === 'report') {
+                    // 如果在报告视图，也刷新数据
+                    await this.loadWeeklyReport();
                 }
-                
-                this.loadCategories(); // 更新统计
             } else {
                 const error = await response.json();
                 alert('保存失败: ' + (error.error || '未知错误'));
@@ -1380,16 +1437,38 @@ const app = {
                 this.showToast('事项删除成功！', 'success');
                 this.closeQuickAddModal();
                 
-                // 刷新相应视图
-                if (this.currentProject) {
-                    await this.loadProjectTasks(this.currentProject);
-                } else if (this.currentTab === 'tasks') {
-                    await this.loadCategoryTasks();
+                // 刷新所有相关视图
+                if (this.currentView === 'categories') {
+                    // 更新分类统计
+                    await this.loadCategories();
+                    
+                    if (this.currentCategory) {
+                        // 如果在项目详情页
+                        if (this.currentProject) {
+                            await this.loadProjectTasks(this.currentProject);
+                            // 同时刷新项目列表（更新统计）
+                            await this.loadProjects(this.currentCategory);
+                        }
+                        // 如果在分类的任务tab
+                        else if (this.currentTab === 'tasks') {
+                            await this.loadCategoryTasks();
+                            // 同时刷新项目列表（更新统计）
+                            await this.loadProjects(this.currentCategory);
+                        }
+                        // 如果在分类的项目tab
+                        else {
+                            await this.loadProjects(this.currentCategory);
+                        }
+                    }
                 } else if (this.currentView === 'weekly') {
+                    // 刷新每周视图
                     await this.loadWeeklyView();
+                    // 同时更新分类统计
+                    await this.loadCategories();
+                } else if (this.currentView === 'report') {
+                    // 如果在报告视图，也刷新数据
+                    await this.loadWeeklyReport();
                 }
-                
-                this.loadCategories();
             } else {
                 alert('删除失败');
             }

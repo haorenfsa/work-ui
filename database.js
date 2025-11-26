@@ -22,14 +22,14 @@ function loadConfig() {
         'data.db': {
           displayName: '主工作空间',
           description: '日常工作任务管理',
-          filePath: 'data.db',
+          filePath: './data/data.db',
           createdAt: new Date().toISOString(),
           lastUsed: new Date().toISOString()
         },
         'personal.db': {
           displayName: '个人空间',
           description: '个人事务管理',
-          filePath: 'personal.db',
+          filePath: './data/personal.db',
           createdAt: new Date().toISOString(),
           lastUsed: new Date().toISOString()
         }
