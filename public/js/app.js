@@ -784,6 +784,11 @@ const app = {
         return Math.ceil((daysPassed + adjustedStartDay + 1) / 7);
     },
 
+    // 获取下一周周次
+    getNextWeekNumber() {
+        return this.getCurrentWeekNumber() + 1;
+    },
+
     // 获取默认周次：周五、周六、周日时返回下一周
     getDefaultWeekNumber() {
         const now = new Date();
@@ -1475,6 +1480,67 @@ const app = {
         } catch (error) {
             console.error('删除事项失败:', error);
             alert('删除失败');
+        }
+    },
+
+    // ============ 未完成事项批量移动 ============
+    
+    async moveUnfinishedToNextWeek() {
+        const nextWeek = this.getNextWeekNumber();
+        
+        try {
+            // 先获取未完成事项数量
+            const countResponse = await fetch(`${API_BASE}/tasks/unfinished/count`);
+            const { count } = await countResponse.json();
+            
+            if (count === 0) {
+                alert('没有未完成的事项');
+                return;
+            }
+            
+            // 确认对话框
+            if (!confirm(`将 ${count} 个未完成的事项移动到 WK${nextWeek}？\n\n包括状态为「待办」、「进行中」和「Backlog」的事项。`)) {
+                return;
+            }
+            
+            // 执行批量更新
+            const updateResponse = await fetch(`${API_BASE}/tasks/unfinished/move-to-week`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ weekNumber: nextWeek })
+            });
+            
+            if (updateResponse.ok) {
+                const result = await updateResponse.json();
+                this.showToast(`成功移动 ${result.updated} 个事项到 WK${nextWeek}！`, 'success');
+                
+                // 刷新当前视图
+                if (this.currentView === 'categories') {
+                    await this.loadCategories();
+                    if (this.currentCategory) {
+                        if (this.currentProject) {
+                            await this.loadProjectTasks(this.currentProject);
+                            await this.loadProjects(this.currentCategory);
+                        } else if (this.currentTab === 'tasks') {
+                            await this.loadCategoryTasks();
+                            await this.loadProjects(this.currentCategory);
+                        } else {
+                            await this.loadProjects(this.currentCategory);
+                        }
+                    }
+                } else if (this.currentView === 'weekly') {
+                    await this.loadWeeklyView();
+                    await this.loadCategories();
+                } else if (this.currentView === 'report') {
+                    await this.loadWeeklyReport();
+                }
+            } else {
+                const error = await updateResponse.json();
+                alert('移动失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('移动未完成事项失败:', error);
+            alert('移动失败，请检查网络连接');
         }
     },
 

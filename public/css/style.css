@@ -60,6 +60,33 @@ body {
     line-height: 1;
 }
 
+/* 未完成到下一周按钮 */
+.btn-move-next-week {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #f39c12;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-move-next-week:hover {
+    background-color: #e67e22;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-move-next-week .icon {
+    font-size: 1rem;
+}
+
 /* 数据库切换按钮 */
 .btn-db-switch {
     display: flex;

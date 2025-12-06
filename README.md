@@ -48,7 +48,7 @@ ui/
 │   │   └── style.css # 样式文件
 │   └── js/
 │       └── app.js    # 前端逻辑
-└── data.db           # SQLite 数据库文件（自动生成）
+└── data/xx.db           # SQLite 数据库文件（自动生成）
 ```
 
 ## 数据库设计

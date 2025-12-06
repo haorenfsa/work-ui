@@ -534,6 +534,49 @@ async function startServer() {
     }
   });
 
+  // ============ 未完成事项批量移动 API ============
+
+  // 获取未完成事项数量
+  app.get('/api/tasks/unfinished/count', (req, res) => {
+    try {
+      const result = get(`
+        SELECT COUNT(*) as count 
+        FROM tasks 
+        WHERE status IN ('todo', 'doing', 'backlog')
+      `);
+      
+      res.json({ count: result.count });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 批量更新未完成事项到指定周次
+  app.put('/api/tasks/unfinished/move-to-week', (req, res) => {
+    try {
+      const { weekNumber } = req.body;
+      
+      if (!weekNumber) {
+        return res.status(400).json({ error: 'weekNumber is required' });
+      }
+      
+      const result = run(`
+        UPDATE tasks 
+        SET week_number = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE status IN ('todo', 'doing', 'backlog')
+      `, [weekNumber]);
+      
+      res.json({ 
+        updated: result.changes,
+        weekNumber 
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============ 数据库管理 API ============
 
   // 获取所有数据库列表
