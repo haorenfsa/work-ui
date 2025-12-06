@@ -727,10 +727,18 @@ const app = {
     // ============ 事项管理 ============
 
     renderTaskItem(task) {
+        const recurringIcon = task.is_recurring ? '🔄 ' : '';
+        const recurringNote = task.is_recurring && task.recurring_note 
+            ? `<span class="recurring-note">${task.recurring_note}</span>` 
+            : '';
+        
         return `
             <div class="task-item priority-${task.priority}" onclick="app.showQuickAddModal(${task.id})">
                 <div class="task-item-header">
-                    <div class="task-item-title">${task.title}</div>
+                    <div class="task-item-title">
+                        ${recurringIcon}${task.title}
+                        ${recurringNote}
+                    </div>
                     <div class="task-item-meta">
                         <span class="task-badge priority-${task.priority}">${task.priority.toUpperCase()}</span>
                         <span class="task-badge status-${task.status}">${this.getStatusText(task.status)}</span>
@@ -1230,6 +1238,12 @@ const app = {
             document.getElementById('quickTaskProgress').value = task.progress;
             document.getElementById('quickTaskWeek').value = task.week_number || '';
             
+            // 设置重复字段
+            const isRecurring = task.is_recurring === 1;
+            document.getElementById('quickTaskRecurring').checked = isRecurring;
+            document.getElementById('quickTaskRecurringNote').value = task.recurring_note || '';
+            document.getElementById('recurringNoteGroup').style.display = isRecurring ? 'block' : 'none';
+            
             // 设置优先级
             this.quickAddPriority = task.priority;
             document.querySelectorAll('.priority-btn').forEach(btn => {
@@ -1254,6 +1268,11 @@ const app = {
             document.getElementById('quickTaskStatus').value = 'todo';
             document.getElementById('quickTaskProgress').value = '0';
             document.getElementById('quickTaskWeek').value = this.getDefaultWeekNumber() || '';
+            
+            // 重置重复字段
+            document.getElementById('quickTaskRecurring').checked = false;
+            document.getElementById('quickTaskRecurringNote').value = '';
+            document.getElementById('recurringNoteGroup').style.display = 'none';
             
             // 重置优先级按钮
             document.querySelectorAll('.priority-btn').forEach(btn => {
@@ -1300,6 +1319,18 @@ const app = {
         });
     },
 
+    toggleRecurringNote() {
+        const checkbox = document.getElementById('quickTaskRecurring');
+        const noteGroup = document.getElementById('recurringNoteGroup');
+        
+        if (checkbox.checked) {
+            noteGroup.style.display = 'block';
+        } else {
+            noteGroup.style.display = 'none';
+            document.getElementById('quickTaskRecurringNote').value = '';
+        }
+    },
+
     async updateQuickProjectOptions() {
         const categoryId = document.getElementById('quickTaskCategory').value;
         const projectSelect = document.getElementById('quickTaskProject');
@@ -1340,6 +1371,8 @@ const app = {
         const status = document.getElementById('quickTaskStatus').value;
         const progress = parseInt(document.getElementById('quickTaskProgress').value) || 0;
         const week_number = parseInt(document.getElementById('quickTaskWeek').value) || null;
+        const is_recurring = document.getElementById('quickTaskRecurring').checked ? 1 : 0;
+        const recurring_note = document.getElementById('quickTaskRecurringNote').value.trim() || null;
 
         // 表单验证
         if (!title) {
@@ -1373,7 +1406,9 @@ const app = {
                     priority,
                     status,
                     progress,
-                    week_number
+                    week_number,
+                    is_recurring,
+                    recurring_note
                 })
             });
 
@@ -1486,33 +1521,58 @@ const app = {
     // ============ 未完成事项批量移动 ============
     
     async moveUnfinishedToNextWeek() {
+        const currentWeek = this.getCurrentWeekNumber();
         const nextWeek = this.getNextWeekNumber();
         
         try {
-            // 先获取未完成事项数量
-            const countResponse = await fetch(`${API_BASE}/tasks/unfinished/count`);
-            const { count } = await countResponse.json();
+            // 1. 获取未完成事项统计（分普通和重复）
+            const countResponse = await fetch(`${API_BASE}/tasks/unfinished/grouped-count?currentWeek=${currentWeek}`);
+            const { normalCount, recurringCount, totalCount } = await countResponse.json();
             
-            if (count === 0) {
+            if (totalCount === 0) {
                 alert('没有未完成的事项');
                 return;
             }
             
-            // 确认对话框
-            if (!confirm(`将 ${count} 个未完成的事项移动到 WK${nextWeek}？\n\n包括状态为「待办」、「进行中」和「Backlog」的事项。`)) {
+            // 2. 显示详细确认信息
+            let message = `将事项移动到 WK${nextWeek}？\n\n`;
+            if (normalCount > 0) {
+                message += `• 普通未完成事项 ${normalCount} 个：直接移动到下周\n`;
+            }
+            if (recurringCount > 0) {
+                message += `• 重复事项 ${recurringCount} 个：在下周创建新副本（不管本周是否完成）\n`;
+            }
+            message += `\n共 ${totalCount} 个事项\n`;
+            message += `\n注：已完成的普通事项不会被移动`;
+            
+            if (!confirm(message)) {
                 return;
             }
             
-            // 执行批量更新
+            // 3. 执行批量操作
             const updateResponse = await fetch(`${API_BASE}/tasks/unfinished/move-to-week`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ weekNumber: nextWeek })
+                body: JSON.stringify({ 
+                    weekNumber: nextWeek,
+                    currentWeek: currentWeek
+                })
             });
             
             if (updateResponse.ok) {
                 const result = await updateResponse.json();
-                this.showToast(`成功移动 ${result.updated} 个事项到 WK${nextWeek}！`, 'success');
+                
+                // 4. 显示成功信息
+                let successMsg = `成功移动到 WK${nextWeek}！`;
+                if (result.movedCount > 0 && result.createdCount > 0) {
+                    successMsg += `\n移动了 ${result.movedCount} 个普通事项，创建了 ${result.createdCount} 个重复事项副本`;
+                } else if (result.movedCount > 0) {
+                    successMsg += `\n移动了 ${result.movedCount} 个事项`;
+                } else if (result.createdCount > 0) {
+                    successMsg += `\n创建了 ${result.createdCount} 个重复事项副本`;
+                }
+                
+                this.showToast(successMsg, 'success');
                 
                 // 刷新当前视图
                 if (this.currentView === 'categories') {

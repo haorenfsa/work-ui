@@ -835,6 +835,36 @@ body {
     color: #2c3e50;
 }
 
+/* 重复事项相关样式 */
+.recurring-note {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    color: #6c757d;
+    background-color: #f8f9fa;
+    border-radius: 3px;
+}
+
+.form-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.813rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+#recurringNoteGroup {
+    margin-top: 0.5rem;
+    padding-left: 1.5rem;
+    border-left: 3px solid #e9ecef;
+}
+
+#quickTaskRecurring {
+    margin-right: 0.5rem;
+    cursor: pointer;
+}
+
 .form-group input,
 .form-group textarea,
 .form-group select {

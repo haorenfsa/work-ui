@@ -292,6 +292,20 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="quickTaskRecurring" onchange="app.toggleRecurringNote()"> 
+                        🔄 每周重复
+                    </label>
+                    <small class="form-hint">勾选后，每次"未完成到下一周"时会在下周自动创建此事项</small>
+                </div>
+                <div class="form-group" id="recurringNoteGroup" style="display:none;">
+                    <label>重复备注（可选）</label>
+                    <input type="text" id="quickTaskRecurringNote" 
+                           placeholder="如：每周一例会、周报提醒等"
+                           maxlength="50">
+                    <small class="form-hint">帮助你快速识别这是什么重复任务</small>
+                </div>
+                <div class="form-group">
                     <label>描述（可选）</label>
                     <textarea id="quickTaskDescription" placeholder="请输入事项详细描述" rows="3"></textarea>
                 </div>
