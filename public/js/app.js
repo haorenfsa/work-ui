@@ -732,6 +732,9 @@ const app = {
             ? `<span class="recurring-note">${task.recurring_note}</span>` 
             : '';
         
+        // 已完成的任务显示100%进度
+        const displayProgress = task.status === 'done' ? 100 : (task.progress || 0);
+        
         return `
             <div class="task-item priority-${task.priority}" onclick="app.showQuickAddModal(${task.id})">
                 <div class="task-item-header">
@@ -749,10 +752,10 @@ const app = {
                 <div class="task-item-footer">
                     <div class="task-progress">
                         <div class="task-progress-bar">
-                            <div class="task-progress-fill" style="width: ${task.progress}%"></div>
+                            <div class="task-progress-fill" style="width: ${displayProgress}%"></div>
                         </div>
                     </div>
-                    <div class="task-week">${task.progress}% ${task.week_number ? `| WK${task.week_number}` : ''}</div>
+                    <div class="task-week">${displayProgress}% ${task.week_number ? `| WK${task.week_number}` : ''}</div>
                 </div>
             </div>
         `;
@@ -1002,9 +1005,16 @@ const app = {
             return;
         }
         
-        const p0Tasks = tasks.filter(t => t.priority === 'p0');
-        const p1Tasks = tasks.filter(t => t.priority === 'p1');
-        const p2Tasks = tasks.filter(t => t.priority === 'p2');
+        // 排序函数：相同优先级按进度从大到小排列
+        const sortByProgress = (a, b) => {
+            const progressA = a.status === 'done' ? 100 : (a.progress || 0);
+            const progressB = b.status === 'done' ? 100 : (b.progress || 0);
+            return progressB - progressA;
+        };
+        
+        const p0Tasks = tasks.filter(t => t.priority === 'p0').sort(sortByProgress);
+        const p1Tasks = tasks.filter(t => t.priority === 'p1').sort(sortByProgress);
+        const p2Tasks = tasks.filter(t => t.priority === 'p2').sort(sortByProgress);
 
         container.innerHTML = '';
 
