@@ -82,6 +82,24 @@ function saveDatabase() {
 
 // 创建表结构
 function initDatabase() {
+  // 检查是否需要迁移旧表结构
+  try {
+    const tableInfo = db.exec("PRAGMA table_info(tasks)");
+    if (tableInfo.length > 0) {
+      const columns = tableInfo[0].values.map(row => row[1]);
+      
+      if (columns.includes('week_number') && !columns.includes('year')) {
+        console.log('检测到旧表结构，开始迁移到 v0.7.0...');
+        migrateToV070();
+        console.log('迁移完成！');
+        saveDatabase();
+        return;
+      }
+    }
+  } catch (e) {
+    // 表不存在，继续创建新表
+  }
+  
   // 分类表
   db.run(`
     CREATE TABLE IF NOT EXISTS categories (
@@ -107,7 +125,7 @@ function initDatabase() {
     )
   `);
 
-  // 事项表
+  // 事项表（新结构：year + week）
   db.run(`
     CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +136,10 @@ function initDatabase() {
       priority TEXT CHECK(priority IN ('p0', 'p1', 'p2')) DEFAULT 'p2',
       status TEXT CHECK(status IN ('todo', 'doing', 'done', 'backlog')) DEFAULT 'todo',
       progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
-      week_number INTEGER,
+      year INTEGER,
+      week INTEGER,
+      is_recurring BOOLEAN DEFAULT 0,
+      recurring_note TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
@@ -130,7 +151,8 @@ function initDatabase() {
   db.run(`
     CREATE TABLE IF NOT EXISTS weekly_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      week_number INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      week INTEGER NOT NULL,
       task_id INTEGER,
       log_type TEXT CHECK(log_type IN ('added', 'progress', 'done')) NOT NULL,
       content TEXT,
@@ -144,12 +166,130 @@ function initDatabase() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_week ON tasks(week_number)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_year_week ON tasks(year, week)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_year ON tasks(year)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_weekly_logs_week ON weekly_logs(week_number)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_recurring ON tasks(is_recurring)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_weekly_logs_year_week ON weekly_logs(year, week)`);
 
   saveDatabase();
   console.log('Database initialized successfully');
+}
+
+// 迁移函数：从 week_number 迁移到 year + week
+function migrateToV070() {
+  db.run('BEGIN TRANSACTION');
+  
+  try {
+    // 1. 创建新的 tasks 表
+    db.run(`
+      CREATE TABLE tasks_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        category_id INTEGER,
+        project_id INTEGER NOT NULL,
+        priority TEXT CHECK(priority IN ('p0', 'p1', 'p2')) DEFAULT 'p2',
+        status TEXT CHECK(status IN ('todo', 'doing', 'done', 'backlog')) DEFAULT 'todo',
+        progress INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
+        year INTEGER,
+        week INTEGER,
+        is_recurring BOOLEAN DEFAULT 0,
+        recurring_note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    
+    // 2. 迁移数据：存量数据年份默认为 2025
+    db.run(`
+      INSERT INTO tasks_new (
+        id, title, description, category_id, project_id,
+        priority, status, progress, year, week,
+        is_recurring, recurring_note,
+        created_at, updated_at
+      )
+      SELECT 
+        id, title, description, category_id, project_id,
+        priority, status, progress,
+        2025,
+        week_number,
+        COALESCE(is_recurring, 0),
+        recurring_note,
+        created_at, updated_at
+      FROM tasks
+    `);
+    
+    // 3. 删除旧表
+    db.run('DROP TABLE tasks');
+    
+    // 4. 重命名新表
+    db.run('ALTER TABLE tasks_new RENAME TO tasks');
+    
+    // 5. 创建索引
+    db.run('CREATE INDEX idx_tasks_category ON tasks(category_id)');
+    db.run('CREATE INDEX idx_tasks_project ON tasks(project_id)');
+    db.run('CREATE INDEX idx_tasks_year_week ON tasks(year, week)');
+    db.run('CREATE INDEX idx_tasks_year ON tasks(year)');
+    db.run('CREATE INDEX idx_tasks_status ON tasks(status)');
+    db.run('CREATE INDEX idx_tasks_recurring ON tasks(is_recurring)');
+    
+    // 6. 迁移 weekly_logs 表
+    const logsTableExists = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='weekly_logs'");
+    if (logsTableExists.length > 0) {
+      db.run(`
+        CREATE TABLE weekly_logs_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          year INTEGER NOT NULL,
+          week INTEGER NOT NULL,
+          task_id INTEGER,
+          log_type TEXT CHECK(log_type IN ('added', 'progress', 'done')) NOT NULL,
+          content TEXT,
+          log_date DATE NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+      `);
+      
+      db.run(`
+        INSERT INTO weekly_logs_new (
+          id, year, week, task_id, log_type, content, log_date, created_at
+        )
+        SELECT 
+          id, 2025, week_number,
+          task_id, log_type, content, log_date, created_at
+        FROM weekly_logs
+      `);
+      
+      db.run('DROP TABLE weekly_logs');
+      db.run('ALTER TABLE weekly_logs_new RENAME TO weekly_logs');
+      db.run('CREATE INDEX idx_weekly_logs_year_week ON weekly_logs(year, week)');
+    }
+    
+    db.run('COMMIT');
+    
+    // 验证迁移结果
+    const result = db.exec(`
+      SELECT 
+        COUNT(*) as total_tasks,
+        COUNT(DISTINCT year) as year_count,
+        MIN(year) as min_year,
+        MAX(year) as max_year
+      FROM tasks
+    `);
+    
+    if (result.length > 0 && result[0].values.length > 0) {
+      const stats = result[0].values[0];
+      console.log(`  迁移统计: 总事项=${stats[0]}, 年份数=${stats[1]}, 年份范围=${stats[2]}-${stats[3]}`);
+    }
+    
+  } catch (error) {
+    db.run('ROLLBACK');
+    console.error('迁移失败，已回滚:', error);
+    throw error;
+  }
 }
 
 // 初始化数据

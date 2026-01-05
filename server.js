@@ -303,7 +303,7 @@ async function startServer() {
   // 获取事项列表（支持过滤）
   app.get('/api/tasks', (req, res) => {
     try {
-      const { category_id, project_id, week_number, status } = req.query;
+      const { category_id, project_id, year, week, status } = req.query;
       let sql = `
         SELECT t.*, c.name as category_name, p.name as project_name
         FROM tasks t
@@ -321,9 +321,13 @@ async function startServer() {
         sql += ' AND t.project_id = ?';
         params.push(project_id);
       }
-      if (week_number) {
-        sql += ' AND t.week_number = ?';
-        params.push(week_number);
+      if (year) {
+        sql += ' AND t.year = ?';
+        params.push(parseInt(year));
+      }
+      if (week) {
+        sql += ' AND t.week = ?';
+        params.push(parseInt(week));
       }
       if (status) {
         sql += ' AND t.status = ?';
@@ -366,7 +370,7 @@ async function startServer() {
   // 创建事项
   app.post('/api/tasks', (req, res) => {
     try {
-      const { title, description, category_id, project_id, priority, status, progress, week_number, is_recurring, recurring_note } = req.body;
+      const { title, description, category_id, project_id, priority, status, progress, year, week, is_recurring, recurring_note } = req.body;
       
       // 如果没有指定project_id，获取该分类的默认项目
       let finalProjectId = project_id;
@@ -386,9 +390,9 @@ async function startServer() {
       }
       
       const result = run(`
-        INSERT INTO tasks (title, description, category_id, project_id, priority, status, progress, week_number, is_recurring, recurring_note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [title, description, category_id, finalProjectId, priority || 'p2', status || 'todo', progress || 0, week_number, is_recurring || 0, recurring_note || null]);
+        INSERT INTO tasks (title, description, category_id, project_id, priority, status, progress, year, week, is_recurring, recurring_note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [title, description, category_id, finalProjectId, priority || 'p2', status || 'todo', progress || 0, year, week, is_recurring || 0, recurring_note || null]);
       
       res.json({ id: result.lastInsertRowid, ...req.body, project_id: finalProjectId });
     } catch (error) {
@@ -401,14 +405,14 @@ async function startServer() {
   app.put('/api/tasks/:id', (req, res) => {
     try {
       const { id } = req.params;
-      const { title, description, category_id, project_id, priority, status, progress, week_number, is_recurring, recurring_note } = req.body;
+      const { title, description, category_id, project_id, priority, status, progress, year, week, is_recurring, recurring_note } = req.body;
       
       run(`
         UPDATE tasks 
         SET title = ?, description = ?, category_id = ?, project_id = ?, priority = ?, 
-            status = ?, progress = ?, week_number = ?, is_recurring = ?, recurring_note = ?, updated_at = CURRENT_TIMESTAMP
+            status = ?, progress = ?, year = ?, week = ?, is_recurring = ?, recurring_note = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `, [title, description, category_id, project_id, priority, status, progress, week_number, is_recurring || 0, recurring_note || null, id]);
+      `, [title, description, category_id, project_id, priority, status, progress, year, week, is_recurring || 0, recurring_note || null, id]);
       
       res.json({ success: true });
     } catch (error) {
@@ -430,15 +434,15 @@ async function startServer() {
   });
 
   // 获取指定周的事项
-  app.get('/api/tasks/week/:weekNumber', (req, res) => {
+  app.get('/api/tasks/week/:year/:week', (req, res) => {
     try {
-      const { weekNumber } = req.params;
+      const { year, week } = req.params;
       const tasks = query(`
         SELECT t.*, c.name as category_name, p.name as project_name
         FROM tasks t
         LEFT JOIN categories c ON t.category_id = c.id
         LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.week_number = ?
+        WHERE t.year = ? AND t.week = ?
         ORDER BY 
           CASE t.priority 
             WHEN 'p0' THEN 1 
@@ -446,7 +450,7 @@ async function startServer() {
             WHEN 'p2' THEN 3 
           END,
           t.created_at DESC
-      `, [weekNumber]);
+      `, [parseInt(year), parseInt(week)]);
       
       res.json(tasks);
     } catch (error) {
@@ -458,9 +462,11 @@ async function startServer() {
   // ============ 周报相关API ============
 
   // 生成周报
-  app.get('/api/weekly-report/:weekNumber', (req, res) => {
+  app.get('/api/weekly-report/:year/:week', (req, res) => {
     try {
-      const { weekNumber } = req.params;
+      const { year, week } = req.params;
+      const yearInt = parseInt(year);
+      const weekInt = parseInt(week);
       
       // 获取本周完成的事项（按分类和项目）
       const doneTasksByCategory = query(`
@@ -469,9 +475,9 @@ async function startServer() {
         FROM tasks t
         JOIN categories c ON t.category_id = c.id
         LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.week_number = ? AND t.status = 'done'
+        WHERE t.year = ? AND t.week = ? AND t.status = 'done'
         ORDER BY c.name, p.name, t.priority
-      `, [weekNumber]);
+      `, [yearInt, weekInt]);
       
       // 获取本周新增的事项
       const addedTasks = query(`
@@ -479,9 +485,9 @@ async function startServer() {
         FROM tasks t
         LEFT JOIN categories c ON t.category_id = c.id
         LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.week_number = ? AND DATE(t.created_at) >= DATE('now', 'weekday 0', '-6 days')
+        WHERE t.year = ? AND t.week = ? AND DATE(t.created_at) >= DATE('now', 'weekday 0', '-6 days')
         ORDER BY t.priority
-      `, [weekNumber]);
+      `, [yearInt, weekInt]);
       
       // 获取进行中的事项
       const inProgressTasks = query(`
@@ -490,9 +496,9 @@ async function startServer() {
         FROM tasks t
         LEFT JOIN categories c ON t.category_id = c.id
         LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.week_number = ? AND t.status = 'doing'
+        WHERE t.year = ? AND t.week = ? AND t.status = 'doing'
         ORDER BY t.priority
-      `, [weekNumber]);
+      `, [yearInt, weekInt]);
       
       // 获取backlog
       const backlogTasks = query(`
@@ -505,7 +511,9 @@ async function startServer() {
       `);
       
       res.json({
-        weekNumber,
+        year: yearInt,
+        week: weekInt,
+        weekNumber: `${yearInt}WK${weekInt}`,
         doneTasksByCategory,
         addedTasks,
         inProgressTasks,
@@ -520,12 +528,12 @@ async function startServer() {
   // 记录周日志
   app.post('/api/weekly-logs', (req, res) => {
     try {
-      const { week_number, task_id, log_type, content, log_date } = req.body;
+      const { year, week, task_id, log_type, content, log_date } = req.body;
       
       const result = run(`
-        INSERT INTO weekly_logs (week_number, task_id, log_type, content, log_date)
-        VALUES (?, ?, ?, ?, ?)
-      `, [week_number, task_id, log_type, content, log_date]);
+        INSERT INTO weekly_logs (year, week, task_id, log_type, content, log_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [year, week, task_id, log_type, content, log_date]);
       
       res.json({ id: result.lastInsertRowid, ...req.body });
     } catch (error) {
@@ -555,11 +563,14 @@ async function startServer() {
   // 获取分组的未完成事项数量
   app.get('/api/tasks/unfinished/grouped-count', (req, res) => {
     try {
-      const { currentWeek } = req.query;
+      const { year, week } = req.query;
       
-      if (!currentWeek) {
-        return res.status(400).json({ error: 'currentWeek is required' });
+      if (!year || !week) {
+        return res.status(400).json({ error: 'year and week are required' });
       }
+      
+      const yearInt = parseInt(year);
+      const weekInt = parseInt(week);
       
       // 普通事项：只统计本周及之前的未完成事项
       const normalResult = get(`
@@ -567,16 +578,19 @@ async function startServer() {
         FROM tasks 
         WHERE status IN ('todo', 'doing', 'backlog')
         AND (is_recurring = 0 OR is_recurring IS NULL)
-        AND (week_number IS NULL OR week_number <= ?)
-      `, [currentWeek]);
+        AND (
+          year < ? 
+          OR (year = ? AND week <= ?)
+        )
+      `, [yearInt, yearInt, weekInt]);
       
       // 重复事项：只统计本周的（避免重复计算）
       const recurringResult = get(`
         SELECT COUNT(*) as count 
         FROM tasks 
         WHERE is_recurring = 1
-        AND week_number = ?
-      `, [currentWeek]);
+        AND year = ? AND week = ?
+      `, [yearInt, weekInt]);
       
       res.json({
         normalCount: normalResult.count,
@@ -592,31 +606,37 @@ async function startServer() {
   // 批量更新未完成事项到指定周次（支持重复事项）
   app.put('/api/tasks/unfinished/move-to-week', (req, res) => {
     try {
-      const { weekNumber, currentWeek } = req.body;
+      const { toYear, toWeek, fromYear, fromWeek } = req.body;
       
-      if (!weekNumber) {
-        return res.status(400).json({ error: 'weekNumber is required' });
+      if (!toYear || !toWeek || !fromYear || !fromWeek) {
+        return res.status(400).json({ 
+          error: 'toYear, toWeek, fromYear, fromWeek are required' 
+        });
       }
       
-      if (!currentWeek) {
-        return res.status(400).json({ error: 'currentWeek is required' });
-      }
+      const toYearInt = parseInt(toYear);
+      const toWeekInt = parseInt(toWeek);
+      const fromYearInt = parseInt(fromYear);
+      const fromWeekInt = parseInt(fromWeek);
       
       // 1. 移动普通未完成事项（只移动本周及之前的）
       const moveResult = run(`
         UPDATE tasks 
-        SET week_number = ?, updated_at = CURRENT_TIMESTAMP
+        SET year = ?, week = ?, updated_at = CURRENT_TIMESTAMP
         WHERE status IN ('todo', 'doing', 'backlog')
         AND (is_recurring = 0 OR is_recurring IS NULL)
-        AND (week_number IS NULL OR week_number <= ?)
-      `, [weekNumber, currentWeek]);
+        AND (
+          year < ? 
+          OR (year = ? AND week <= ?)
+        )
+      `, [toYearInt, toWeekInt, fromYearInt, fromYearInt, fromWeekInt]);
       
       // 2. 获取本周的重复事项（只复制本周的，避免额外重复）
       const recurringTasks = query(`
         SELECT * FROM tasks 
         WHERE is_recurring = 1
-        AND week_number = ?
-      `, [currentWeek]);
+        AND year = ? AND week = ?
+      `, [fromYearInt, fromWeekInt]);
       
       // 3. 为每个重复事项创建下周副本
       let createdCount = 0;
@@ -624,16 +644,17 @@ async function startServer() {
         run(`
           INSERT INTO tasks (
             title, description, category_id, project_id, 
-            priority, status, progress, week_number,
+            priority, status, progress, year, week,
             is_recurring, recurring_note
-          ) VALUES (?, ?, ?, ?, ?, 'todo', 0, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, 'todo', 0, ?, ?, ?, ?)
         `, [
           task.title,
           task.description,
           task.category_id,
           task.project_id,
           task.priority,
-          weekNumber,
+          toYearInt,
+          toWeekInt,
           1,
           task.recurring_note
         ]);
@@ -643,7 +664,8 @@ async function startServer() {
       res.json({ 
         movedCount: moveResult.changes || 0,
         createdCount: createdCount,
-        weekNumber 
+        toYear: toYearInt,
+        toWeek: toWeekInt
       });
     } catch (error) {
       console.error('Error:', error);

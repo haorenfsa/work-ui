@@ -29,8 +29,13 @@ const app = {
         // 从 URL 读取参数
         const params = this.parseUrlParams();
         
-        // 设置视图和周次
-        this.currentWeek = params.week || this.getCurrentWeekNumber();
+        // 设置当前周次
+        if (params.year && params.week) {
+            this.currentWeek = { year: params.year, week: params.week };
+        } else {
+            this.currentWeek = this.getCurrentWeek();
+        }
+        
         this.setupWeekOptions();
         
         // 应用视图
@@ -60,15 +65,25 @@ const app = {
     // 解析 URL 参数
     parseUrlParams() {
         const urlParams = new URLSearchParams(window.location.search);
-        return {
+        const result = {
             view: urlParams.get('view'),
-            week: urlParams.get('week') ? parseInt(urlParams.get('week')) : null,
             project: urlParams.get('project') || '',
             status: urlParams.get('status') || '',
-            // 分类管理相关参数
             category: urlParams.get('category') ? parseInt(urlParams.get('category')) : null,
             tab: urlParams.get('tab') || 'projects'
         };
+        
+        // 解析周次参数（支持格式: week=2026WK1）
+        const weekParam = urlParams.get('week');
+        if (weekParam) {
+            const parsed = this.parseWeek(weekParam);
+            if (parsed) {
+                result.year = parsed.year;
+                result.week = parsed.week;
+            }
+        }
+        
+        return result;
     },
 
     // 更新 URL（不刷新页面）
@@ -94,7 +109,11 @@ const app = {
         // 每周视图参数
         else if (this.currentView === 'weekly') {
             params.set('view', 'weekly');
-            params.set('week', this.currentWeek);
+            
+            // 使用组合格式更简洁
+            if (this.currentWeek) {
+                params.set('week', this.formatWeek(this.currentWeek.year, this.currentWeek.week));
+            }
             
             if (this.weekFilters.projectId) {
                 params.set('project', this.weekFilters.projectId);
@@ -129,7 +148,11 @@ const app = {
             const params = this.parseUrlParams();
             
             if (params.view === 'weekly') {
-                this.currentWeek = params.week || this.getCurrentWeekNumber();
+                if (params.year && params.week) {
+                    this.currentWeek = { year: params.year, week: params.week };
+                } else {
+                    this.currentWeek = this.getCurrentWeek();
+                }
                 this.weekFilters.projectId = params.project || '';
                 this.weekFilters.status = params.status || '';
                 this.showView('weekly');
@@ -755,7 +778,7 @@ const app = {
                             <div class="task-progress-fill" style="width: ${displayProgress}%"></div>
                         </div>
                     </div>
-                    <div class="task-week">${displayProgress}% ${task.week_number ? `| WK${task.week_number}` : ''}</div>
+                    <div class="task-week">${displayProgress}% ${task.year && task.week ? `| ${this.formatWeek(task.year, task.week)}` : ''}</div>
                 </div>
             </div>
         `;
@@ -775,9 +798,13 @@ const app = {
 
     // ============ 每周视图 ============
 
-    getCurrentWeekNumber() {
+    // ====== 周次计算工具函数 ======
+    
+    // 获取当前周次（返回对象 {year, week}）
+    getCurrentWeek() {
         const now = new Date();
-        const start = new Date(now.getFullYear(), 0, 1);
+        const year = now.getFullYear();
+        const start = new Date(year, 0, 1);
         
         // 获取1月1日是周几 (0=周日, 1=周一, ..., 6=周六)
         const startDay = start.getDay();
@@ -786,39 +813,111 @@ const app = {
         const diff = now - start;
         const daysPassed = Math.floor(diff / (1000 * 60 * 60 * 24));
         
-        // 调整：如果1月1日不是周一，需要加上偏移量
-        // 例如：如果1月1日是周三(3)，那么第一周从周一开始应该是在1月1日之前2天
-        // 使用周一作为一周的开始（周一=1，周日=0，需要调整为周一=0）
-        const adjustedStartDay = startDay === 0 ? 6 : startDay - 1; // 周日变成6，周一变成0
+        // 调整：使用周一作为一周的开始
+        const adjustedStartDay = startDay === 0 ? 6 : startDay - 1;
         
-        // 计算周数：(已过天数 + 开始日偏移) / 7，向上取整
-        return Math.ceil((daysPassed + adjustedStartDay + 1) / 7);
+        // 计算周数
+        const week = Math.ceil((daysPassed + adjustedStartDay + 1) / 7);
+        
+        return { year, week };
     },
-
-    // 获取下一周周次
-    getNextWeekNumber() {
-        return this.getCurrentWeekNumber() + 1;
+    
+    // 获取下一周
+    getNextWeek(currentYear, currentWeek) {
+        let year = currentYear;
+        let week = currentWeek + 1;
+        
+        // 检查是否需要跨年（简单处理：假设一年最多53周）
+        if (week > 52) {
+            // 检查当年是否真的有53周
+            const lastDayOfYear = new Date(year, 11, 31);
+            const lastWeek = this.getWeekOfDate(lastDayOfYear);
+            
+            if (week > lastWeek.week) {
+                year++;
+                week = 1;
+            }
+        }
+        
+        return { year, week };
     },
-
+    
+    // 获取上一周
+    getPreviousWeek(currentYear, currentWeek) {
+        let year = currentYear;
+        let week = currentWeek - 1;
+        
+        if (week < 1) {
+            year--;
+            // 获取上一年的最后一周
+            const lastDayOfPrevYear = new Date(year, 11, 31);
+            week = this.getWeekOfDate(lastDayOfPrevYear).week;
+        }
+        
+        return { year, week };
+    },
+    
+    // 获取指定日期的周次
+    getWeekOfDate(date) {
+        const year = date.getFullYear();
+        const start = new Date(year, 0, 1);
+        const startDay = start.getDay();
+        const diff = date - start;
+        const daysPassed = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const adjustedStartDay = startDay === 0 ? 6 : startDay - 1;
+        const week = Math.ceil((daysPassed + adjustedStartDay + 1) / 7);
+        
+        return { year, week };
+    },
+    
+    // 格式化周次显示
+    formatWeek(year, week) {
+        if (!year || !week) return '';
+        return `${year}WK${week}`;
+    },
+    
+    // 解析周次字符串（用于URL参数等）
+    parseWeek(weekString) {
+        if (!weekString) return null;
+        const match = weekString.match(/(\d{4})WK(\d+)/);
+        if (!match) return null;
+        
+        return {
+            year: parseInt(match[1]),
+            week: parseInt(match[2])
+        };
+    },
+    
+    // 比较两个周次（返回 -1, 0, 1）
+    compareWeeks(year1, week1, year2, week2) {
+        if (year1 !== year2) {
+            return year1 - year2;
+        }
+        return week1 - week2;
+    },
+    
     // 获取默认周次：周五、周六、周日时返回下一周
-    getDefaultWeekNumber() {
+    getDefaultWeek() {
         const now = new Date();
         const dayOfWeek = now.getDay(); // 0=周日, 1=周一, ..., 6=周六
-        const currentWeek = this.getCurrentWeekNumber();
+        const current = this.getCurrentWeek();
         
         // 如果是周五(5)、周六(6)、周日(0)，返回下一周
         if (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6) {
-            return currentWeek + 1;
+            return this.getNextWeek(current.year, current.week);
         }
         
-        return currentWeek;
+        return current;
     },
 
     async loadWeeklyView() {
-        document.getElementById('weekTitle').textContent = `WK${this.currentWeek}`;
+        const weekDisplay = this.formatWeek(this.currentWeek.year, this.currentWeek.week);
+        document.getElementById('weekTitle').textContent = weekDisplay;
         
         try {
-            const response = await fetch(`${API_BASE}/tasks/week/${this.currentWeek}`);
+            const response = await fetch(
+                `${API_BASE}/tasks/week/${this.currentWeek.year}/${this.currentWeek.week}`
+            );
             const tasks = await response.json();
             this.weeklyTasks = tasks;
             
@@ -1041,39 +1140,54 @@ const app = {
     },
 
     changeWeek(delta) {
-        this.currentWeek += delta;
-        this.loadWeeklyView();
-        
-        // 更新 URL
-        if (this.currentView === 'weekly') {
-            this.updateUrl();
+        if (delta > 0) {
+            // 下一周
+            this.currentWeek = this.getNextWeek(this.currentWeek.year, this.currentWeek.week);
+        } else {
+            // 上一周
+            this.currentWeek = this.getPreviousWeek(this.currentWeek.year, this.currentWeek.week);
         }
+        
+        this.loadWeeklyView();
+        this.updateUrl();
     },
 
     // ============ 周报生成 ============
 
     setupWeekOptions() {
         const select = document.getElementById('reportWeekSelect');
-        const currentWeek = this.getCurrentWeekNumber();
+        select.innerHTML = ''; // 清空
+        
+        let current = this.getCurrentWeek();
         
         // 生成最近10周的选项
         for (let i = 0; i < 10; i++) {
-            const week = currentWeek - i;
+            const weekStr = this.formatWeek(current.year, current.week);
             const option = document.createElement('option');
-            option.value = week;
-            option.textContent = `WK${week}`;
+            option.value = weekStr;
+            option.textContent = weekStr;
             if (i === 0) option.selected = true;
             select.appendChild(option);
+            
+            // 计算上一周
+            current = this.getPreviousWeek(current.year, current.week);
         }
     },
 
     async loadWeeklyReport() {
-        const weekNumber = document.getElementById('reportWeekSelect').value;
+        const weekString = document.getElementById('reportWeekSelect').value;
+        const parsed = this.parseWeek(weekString);
+        
+        if (!parsed) {
+            alert('无效的周次格式');
+            return;
+        }
         
         try {
-            const response = await fetch(`${API_BASE}/weekly-report/${weekNumber}`);
+            const response = await fetch(
+                `${API_BASE}/weekly-report/${parsed.year}/${parsed.week}`
+            );
             const data = await response.json();
-            
             this.renderReport(data);
         } catch (error) {
             console.error('生成周报失败:', error);
@@ -1082,7 +1196,8 @@ const app = {
     },
 
     renderReport(data) {
-        let markdown = `# WK${data.weekNumber} 周报\n\n`;
+        const weekDisplay = this.formatWeek(data.year, data.week);
+        let markdown = `# ${weekDisplay} 周报\n\n`;
         
         // 本周进展（按分类和项目）
         markdown += `## 本周进展\n\n`;
@@ -1205,12 +1320,12 @@ const app = {
 
     downloadReport() {
         const content = document.getElementById('reportContent').textContent;
-        const weekNumber = document.getElementById('reportWeekSelect').value;
+        const weekString = document.getElementById('reportWeekSelect').value;
         const blob = new Blob([content], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `wk${weekNumber}.md`;
+        a.download = `${weekString.replace('WK', 'wk')}.md`;
         a.click();
         URL.revokeObjectURL(url);
     },
@@ -1246,7 +1361,8 @@ const app = {
             document.getElementById('quickTaskCategory').value = task.category_id || '';
             document.getElementById('quickTaskStatus').value = task.status;
             document.getElementById('quickTaskProgress').value = task.progress;
-            document.getElementById('quickTaskWeek').value = task.week_number || '';
+            const weekStr = task.year && task.week ? this.formatWeek(task.year, task.week) : '';
+            document.getElementById('quickTaskWeek').value = weekStr;
             
             // 设置重复字段
             const isRecurring = task.is_recurring === 1;
@@ -1277,7 +1393,8 @@ const app = {
             document.getElementById('quickTaskDescription').value = '';
             document.getElementById('quickTaskStatus').value = 'todo';
             document.getElementById('quickTaskProgress').value = '0';
-            document.getElementById('quickTaskWeek').value = this.getDefaultWeekNumber() || '';
+            const defaultWeek = this.getDefaultWeek();
+            document.getElementById('quickTaskWeek').value = this.formatWeek(defaultWeek.year, defaultWeek.week);
             
             // 重置重复字段
             document.getElementById('quickTaskRecurring').checked = false;
@@ -1380,7 +1497,8 @@ const app = {
         const priority = this.quickAddPriority;
         const status = document.getElementById('quickTaskStatus').value;
         const progress = parseInt(document.getElementById('quickTaskProgress').value) || 0;
-        const week_number = parseInt(document.getElementById('quickTaskWeek').value) || null;
+        const weekStr = document.getElementById('quickTaskWeek').value.trim();
+        const weekData = weekStr ? this.parseWeek(weekStr) : null;
         const is_recurring = document.getElementById('quickTaskRecurring').checked ? 1 : 0;
         const recurring_note = document.getElementById('quickTaskRecurringNote').value.trim() || null;
 
@@ -1416,7 +1534,8 @@ const app = {
                     priority,
                     status,
                     progress,
-                    week_number,
+                    year: weekData ? weekData.year : null,
+                    week: weekData ? weekData.week : null,
                     is_recurring,
                     recurring_note
                 })
@@ -1531,12 +1650,16 @@ const app = {
     // ============ 未完成事项批量移动 ============
     
     async moveUnfinishedToNextWeek() {
-        const currentWeek = this.getCurrentWeekNumber();
-        const nextWeek = this.getNextWeekNumber();
+        const current = this.currentWeek;
+        const next = this.getNextWeek(current.year, current.week);
+        const currentDisplay = this.formatWeek(current.year, current.week);
+        const nextDisplay = this.formatWeek(next.year, next.week);
         
         try {
             // 1. 获取未完成事项统计（分普通和重复）
-            const countResponse = await fetch(`${API_BASE}/tasks/unfinished/grouped-count?currentWeek=${currentWeek}`);
+            const countResponse = await fetch(
+                `${API_BASE}/tasks/unfinished/grouped-count?year=${current.year}&week=${current.week}`
+            );
             const { normalCount, recurringCount, totalCount } = await countResponse.json();
             
             if (totalCount === 0) {
@@ -1545,7 +1668,7 @@ const app = {
             }
             
             // 2. 显示详细确认信息
-            let message = `将事项移动到 WK${nextWeek}？\n\n`;
+            let message = `将事项移动到 ${nextDisplay}？\n\n`;
             if (normalCount > 0) {
                 message += `• 普通未完成事项 ${normalCount} 个：直接移动到下周\n`;
             }
@@ -1564,8 +1687,10 @@ const app = {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    weekNumber: nextWeek,
-                    currentWeek: currentWeek
+                    toYear: next.year,
+                    toWeek: next.week,
+                    fromYear: current.year,
+                    fromWeek: current.week
                 })
             });
             
@@ -1573,7 +1698,7 @@ const app = {
                 const result = await updateResponse.json();
                 
                 // 4. 显示成功信息
-                let successMsg = `成功移动到 WK${nextWeek}！`;
+                let successMsg = `成功移动到 ${nextDisplay}！`;
                 if (result.movedCount > 0 && result.createdCount > 0) {
                     successMsg += `\n移动了 ${result.movedCount} 个普通事项，创建了 ${result.createdCount} 个重复事项副本`;
                 } else if (result.movedCount > 0) {
